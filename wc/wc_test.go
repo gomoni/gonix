@@ -20,12 +20,12 @@ import (
 // TODO: convert to table test
 func TestWcFromArgs(t *testing.T) {
 
-	wc1 := Wc().Bytes(true).Lines(true).Words(true)
+	wc1 := New().Bytes(true).Lines(true).Words(true)
 	wc2, err := FromArgs([]string{})
 	require.NoError(t, err)
 	require.Equal(t, wc1, wc2)
 
-	wc1 = Wc().Lines(true)
+	wc1 = New().Lines(true)
 	wc2, err = FromArgs([]string{"--lines"})
 	require.NoError(t, err)
 	require.Equal(t, wc1, wc2)
@@ -45,19 +45,19 @@ func TestWc(t *testing.T) {
 		},
 		{
 			"wc -l",
-			Wc().Lines(true),
+			New().Lines(true),
 			"three\nsmall\npigs\n",
 			"3\n",
 		},
 		{
 			"wc -cmlLw",
-			Wc().Bytes(true).Chars(true).Lines(true).MaxLineLength(true).Words(true),
+			New().Bytes(true).Chars(true).Lines(true).MaxLineLength(true).Words(true),
 			"The three žluťoučká\nsmall\npigs\n",
 			" 3 5 31 35 19\n",
 		},
 		{
 			"wc - three-small-pigs",
-			Wc().Lines(true).Files("-", threeSmallPigs),
+			New().Lines(true).Files("-", threeSmallPigs),
 			"1\n2\n3\n4\n",
 			fmt.Sprintf(" 4 -\n 3 %s\n 7 total\n", threeSmallPigs),
 		},
@@ -68,7 +68,7 @@ func TestWc(t *testing.T) {
 
 type testCase struct {
 	name     string
-	cmd      *WcFilter
+	cmd      *Wc
 	input    string
 	expected string
 }

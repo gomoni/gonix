@@ -25,51 +25,54 @@ func TestCat(t *testing.T) {
 	testCases := []testCase{
 		{
 			"cat",
-			Cat(),
+			New(),
 			"three\nsmall\npigs\n",
 			"three\nsmall\npigs\n",
 		},
 		// --show-all
 		{
 			"cat -b",
-			Cat().ShowNumber(NonBlank),
+			New().ShowNumber(NonBlank),
 			"three\n\n\nsmall\npigs\n",
 			"     1\tthree\n\n\n     2\tsmall\n     3\tpigs\n",
 		},
 		// -e   equivalent to -vE
 		{
 			"cat -E",
-			Cat().ShowEnds(true),
+			New().ShowEnds(true),
 			"three\nsmall\npigs\n",
 			"three$\nsmall$\npigs$\n",
 		},
 		{
 			"cat -n",
-			Cat().ShowNumber(All),
+			New().ShowNumber(All),
 			"three\nsmall\npigs\n",
 			"     1\tthree\n     2\tsmall\n     3\tpigs\n",
 		},
 		{
 			"cat -s",
-			Cat().SqueezeBlanks(true),
+			New().SqueezeBlanks(true),
 			"three\n\n\nsmall\npigs\n",
 			"three\n\nsmall\npigs\n",
 		},
 		// -t     equivalent to -vT
 		{
 			"cat -T",
-			Cat().ShowTabs(true),
+			New().ShowTabs(true),
 			"\tthree\nsmall\t\npi\tgs\n",
 			"^Ithree\nsmall^I\npi^Igs\n",
 		},
-		// -s show-non-printing
-		// must be brave enough to implement this
-		// https://github.com/coreutils/coreutils/blob/master/src/cat.c#L415
 		{
 			"cat -ET",
-			Cat().ShowEnds(true).ShowTabs(true),
+			New().ShowEnds(true).ShowTabs(true),
 			"\tthree\nsmall\t\npi\tgs\n",
 			"^Ithree$\nsmall^I$\npi^Igs$\n",
+		},
+		{
+			"cat -A",
+			New().ShowNonPrinting(true).ShowEnds(true).ShowTabs(true),
+			string(rune(127)) + "\tthree\nsmall\t\npi\tgs\n",
+			"^?^Ithree$\nsmall^I$\npi^Igs$\n",
 		},
 	}
 
@@ -78,7 +81,7 @@ func TestCat(t *testing.T) {
 
 type testCase struct {
 	name     string
-	cmd      *CatFilter
+	cmd      *Cat
 	input    string
 	expected string
 }

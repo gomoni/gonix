@@ -1,3 +1,7 @@
+// Copyright 2022 Michal Vyskocil. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
 package example_test
 
 import (
@@ -25,7 +29,7 @@ func TestGoleak(t *testing.T) {
 		Stderr: os.Stderr,
 	}
 	ctx := context.Background()
-	err := pipe.Run(ctx, stdio, cat.Cat(), wc.Wc().Lines(true))
+	err := pipe.Run(ctx, stdio, cat.New(), wc.New().Lines(true))
 	if err != nil {
 		log.Fatal(err)
 	}

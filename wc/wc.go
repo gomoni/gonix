@@ -39,7 +39,7 @@ import (
 
 */
 
-type WcFilter struct {
+type Wc struct {
 	debug         bool
 	bytes         bool
 	chars         bool
@@ -49,13 +49,13 @@ type WcFilter struct {
 	files         []string
 }
 
-func Wc() *WcFilter {
-	return &WcFilter{}
+func New() *Wc {
+	return &Wc{}
 }
 
 // FromArgs builds a WcFilter from standard argv except the command name (os.Argv[1:])
-func FromArgs(argv []string) (*WcFilter, error) {
-	cmd := &WcFilter{}
+func FromArgs(argv []string) (*Wc, error) {
+	cmd := &Wc{}
 
 	if len(argv) == 0 {
 		cmd = cmd.Bytes(true).Lines(true).Words(true)
@@ -77,43 +77,43 @@ func FromArgs(argv []string) (*WcFilter, error) {
 	return cmd, nil
 }
 
-func (w *WcFilter) Bytes(b bool) *WcFilter {
+func (w *Wc) Bytes(b bool) *Wc {
 	w.bytes = b
 	return w
 }
 
-func (w *WcFilter) Chars(b bool) *WcFilter {
+func (w *Wc) Chars(b bool) *Wc {
 	w.chars = b
 	return w
 }
 
-func (w *WcFilter) Lines(lines bool) *WcFilter {
+func (w *Wc) Lines(lines bool) *Wc {
 	w.lines = lines
 	return w
 }
 
-func (w *WcFilter) MaxLineLength(b bool) *WcFilter {
+func (w *Wc) MaxLineLength(b bool) *Wc {
 	w.maxLineLength = b
 	return w
 }
 
-func (w *WcFilter) Words(b bool) *WcFilter {
+func (w *Wc) Words(b bool) *Wc {
 	w.words = b
 	return w
 }
 
 // Files adds files into a list of files
-func (w *WcFilter) Files(files ...string) *WcFilter {
+func (w *Wc) Files(files ...string) *Wc {
 	w.files = append(w.files, files...)
 	return w
 }
 
-func (w *WcFilter) SetDebug(debug bool) *WcFilter {
+func (w *Wc) SetDebug(debug bool) *Wc {
 	w.debug = debug
 	return w
 }
 
-func (c WcFilter) Run(ctx context.Context, stdio pipe.Stdio) error {
+func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 	debug := internal.Logger(c.debug, "wc", stdio.Stderr)
 
 	files := c.files
@@ -191,7 +191,7 @@ func (c WcFilter) Run(ctx context.Context, stdio pipe.Stdio) error {
 	return nil
 }
 
-func (c WcFilter) runFile(ctx context.Context, in io.Reader, debug *log.Logger) (stats, error) {
+func (c Wc) runFile(ctx context.Context, in io.Reader, debug *log.Logger) (stats, error) {
 	var stat stats
 	s := bufio.NewScanner(in)
 	for s.Scan() {
@@ -228,7 +228,7 @@ func (c WcFilter) runFile(ctx context.Context, in io.Reader, debug *log.Logger) 
 
 // percentsArgsFn ensures wc prints in following order: newline, word,
 // character, byte, maximum line length.
-func (c WcFilter) percentsArgsFn() ([]string, []func(stats) int) {
+func (c Wc) percentsArgsFn() ([]string, []func(stats) int) {
 	percents := make([]string, 0, 5)
 	argsFn := make([]func(stat stats) int, 0, 5)
 	if c.lines {

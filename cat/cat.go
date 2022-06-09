@@ -5,6 +5,7 @@
 package cat
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -38,7 +39,7 @@ const (
 	All      number = 2
 )
 
-type CatFilter struct {
+type Cat struct {
 	debug           bool
 	files           []string
 	showNumber      number
@@ -48,13 +49,13 @@ type CatFilter struct {
 	showNonPrinting bool
 }
 
-func Cat() *CatFilter {
-	return &CatFilter{}
+func New() *Cat {
+	return &Cat{}
 }
 
 // FromArgs build a CatFilter from standard argv except the command name (os.Argv[1:])
-func FromArgs(argv []string) (*CatFilter, error) {
-	cmd := &CatFilter{}
+func FromArgs(argv []string) (*Cat, error) {
+	cmd := &Cat{}
 	flag := pflag.FlagSet{}
 
 	nb := flag.BoolP("number-nonblank", "b", false, "number non blank lines only")
@@ -63,6 +64,23 @@ func FromArgs(argv []string) (*CatFilter, error) {
 	flag.BoolVarP(&cmd.squeezeBlanks, "squeeze-blanks", "s", false, "ignore repeated blank lines")
 	flag.Bool("u", false, "ignored, for compatibility with POSIX")
 	flag.BoolVarP(&cmd.showTabs, "show-tabs", "T", false, "print TAB as ^I")
+	flag.BoolVarP(&cmd.showNonPrinting, "show-nonprinting", "-v", false, "use ^ and M- notation for non printing characters")
+
+	// compound options
+	var all, e, t bool
+	flag.BoolVarP(&all, "show-all", "A", false, "equivalent of -vET")
+	// TODO FIXME - single dash options only - this accepts -e and --e
+	flag.BoolVarP(&e, "e", "e", false, "equivalent of -vE")
+	flag.BoolVarP(&t, "t", "t", false, "equivalent of -vT")
+	if all {
+		cmd.ShowNonPrinting(true).ShowEnds(true).ShowTabs(true)
+	}
+	if e {
+		cmd.ShowNonPrinting(true).ShowEnds(true)
+	}
+	if t {
+		cmd.ShowNonPrinting(true).ShowTabs(true)
+	}
 
 	err := flag.Parse(argv)
 	if err != nil {
@@ -81,52 +99,52 @@ func FromArgs(argv []string) (*CatFilter, error) {
 }
 
 // Files are input files, where - denotes stdin
-func (c *CatFilter) Files(f ...string) *CatFilter {
+func (c *Cat) Files(f ...string) *Cat {
 	c.files = append(c.files, f...)
 	return c
 }
 
 // ShowNumber adds none all or non empty output lines
-func (c *CatFilter) ShowNumber(n number) *CatFilter {
+func (c *Cat) ShowNumber(n number) *Cat {
 	c.showNumber = n
 	return c
 }
 
 // ShowEnds add $ to the end of each line
-func (c *CatFilter) ShowEnds(b bool) *CatFilter {
+func (c *Cat) ShowEnds(b bool) *Cat {
 	c.showEnds = b
 	return c
 }
 
 // SqueezeBlanks - supress repeated empty lines
-func (c *CatFilter) SqueezeBlanks(b bool) *CatFilter {
+func (c *Cat) SqueezeBlanks(b bool) *Cat {
 	c.squeezeBlanks = b
 	return c
 }
 
 // ShowTabs display TAB as ^I
-func (c *CatFilter) ShowTabs(b bool) *CatFilter {
+func (c *Cat) ShowTabs(b bool) *Cat {
 	c.showTabs = b
 	return c
 }
 
 // ShowNonPrinting use ^ and M- notation, except for LFD and TAB
-func (c *CatFilter) ShowNonPrinting(b bool) *CatFilter {
+func (c *Cat) ShowNonPrinting(b bool) *Cat {
 	c.showNonPrinting = b
-	panic("not yet implemented")
+	return c
 }
 
 // SetDebug additional debugging messages on stderr
-func (c *CatFilter) SetDebug(debug bool) *CatFilter {
+func (c *Cat) SetDebug(debug bool) *Cat {
 	c.debug = debug
 	return c
 }
 
-func (c CatFilter) modifyStdout() bool {
+func (c Cat) modifyStdout() bool {
 	return c.showNumber != None || c.showEnds || c.squeezeBlanks || c.showTabs || c.showNonPrinting
 }
 
-func (c CatFilter) Run(ctx context.Context, stdio pipe.Stdio) error {
+func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 	debug := internal.Logger(c.debug, "cat", stdio.Stderr)
 	var filters []pipe.Filter
 	if !c.modifyStdout() {
@@ -140,6 +158,9 @@ func (c CatFilter) Run(ctx context.Context, stdio pipe.Stdio) error {
 		for idx, prog := range progs {
 			filters[idx] = awkInternal{prog}
 		}
+	}
+	if c.showNonPrinting {
+		filters = append(filters, catNonPrinting{})
 	}
 	if len(filters) == 0 {
 		return fmt.Errorf("cat: nothing to do")
@@ -175,7 +196,7 @@ func (c CatFilter) Run(ctx context.Context, stdio pipe.Stdio) error {
 	return nil
 }
 
-func (c CatFilter) awk(debug *log.Logger) ([]*parser.Program, error) {
+func (c Cat) awk(debug *log.Logger) ([]*parser.Program, error) {
 	debug.Printf("c=%+v", c)
 	var sources [][]byte
 	if c.showEnds {
@@ -278,4 +299,62 @@ func (c cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 	}
 	debug.Printf("found io.EOF, exiting")
 	return nil
+}
+
+// catNonPrinting converts non printable characters to ^ M- codes
+type catNonPrinting struct{}
+
+func (_ catNonPrinting) Run(ctx context.Context, stdio pipe.Stdio) error {
+	var inp [4096]byte
+	var out bytes.Buffer
+	for {
+		n, err := stdio.Stdin.Read(inp[:])
+		if err == io.EOF {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		nonPrinting(inp[:n], &out)
+		_, err = out.WriteTo(stdio.Stdout)
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func nonPrinting(inp []byte, out *bytes.Buffer) {
+	out.Reset()
+	for _, ch := range inp {
+		if ch < 32 {
+			// print TAB and \n
+			if ch == 9 || ch == 10 {
+				out.WriteByte(ch)
+				continue
+			}
+			out.WriteByte('^')
+			out.WriteByte(ch + 64)
+			continue
+		} else if ch == 127 {
+			out.WriteByte('^')
+			out.WriteByte('?')
+			continue
+		} else if ch >= 128 && ch < 160 {
+			out.WriteString(`M-BM-^`)
+			out.WriteByte(ch - 128 + 64)
+			continue
+		} else if ch >= 160 && ch < 192 {
+			out.WriteString(`M-BM-`)
+			out.WriteByte(ch - 128)
+			continue
+		} else if ch >= 192 && ch < 224 {
+			out.WriteString(`M-CM-^`)
+			out.WriteByte(ch - 128)
+			continue
+		} else if ch >= 224 {
+			out.WriteString(`M-CM-`)
+			out.WriteByte(ch - 192)
+			continue
+		}
+		out.WriteByte(ch)
+	}
 }

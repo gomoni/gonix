@@ -1,0 +1,5 @@
+gonix
+# helpers, testing awk scripts and so
+test/
+# vim swap files
+.*.swp

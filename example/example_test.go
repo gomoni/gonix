@@ -1,3 +1,7 @@
+// Copyright 2022 Michal Vyskocil. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
 package example_test
 
 import (
@@ -24,7 +28,7 @@ func ExampleRun() {
 	}
 	ctx := context.Background()
 	// printf "three\nsmall\npigs\n" | cat | wc -l
-	err := pipe.Run(ctx, stdio, cat.Cat(), wc.Wc().Lines(true))
+	err := pipe.Run(ctx, stdio, cat.New(), wc.New().Lines(true))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -99,4 +103,26 @@ func ExampleSh_Run() {
 	}
 	// Output:
 	// 3
+}
+
+// Parsing of the command line with exec enabled
+func ExampleSh_Run_exec() {
+	tools := map[string]func([]string) (pipe.Filter, error){
+		"wc": func(a []string) (pipe.Filter, error) { return wc.FromArgs(a) },
+	}
+	splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
+	stdio := pipe.Stdio{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+	ctx := context.Background()
+
+	sh := pipe.NewSh(tools, splitfn).AllowExec(true)
+	err := sh.Run(ctx, stdio, `go version | wc -l`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Output:
+	// 1
 }
