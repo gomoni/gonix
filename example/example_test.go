@@ -84,7 +84,7 @@ func ExampleRun_exec() {
 
 // Parsing of the command line
 func ExampleSh_Run() {
-	tools := map[string]func([]string) (pipe.Filter, error){
+	builtins := map[string]func([]string) (pipe.Filter, error){
 		"cat": func(a []string) (pipe.Filter, error) { return cat.FromArgs(a) },
 		"wc":  func(a []string) (pipe.Filter, error) { return wc.FromArgs(a) },
 	}
@@ -96,7 +96,7 @@ func ExampleSh_Run() {
 	}
 	ctx := context.Background()
 
-	sh := pipe.NewSh(tools, splitfn)
+	sh := pipe.NewSh(builtins, splitfn)
 	err := sh.Run(ctx, stdio, `cat | wc -l`)
 	if err != nil {
 		log.Fatal(err)
@@ -107,7 +107,7 @@ func ExampleSh_Run() {
 
 // Parsing of the command line with exec enabled
 func ExampleSh_Run_exec() {
-	tools := map[string]func([]string) (pipe.Filter, error){
+	builtins := map[string]func([]string) (pipe.Filter, error){
 		"wc": func(a []string) (pipe.Filter, error) { return wc.FromArgs(a) },
 	}
 	splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
@@ -118,7 +118,7 @@ func ExampleSh_Run_exec() {
 	}
 	ctx := context.Background()
 
-	sh := pipe.NewSh(tools, splitfn).AllowExec(true)
+	sh := pipe.NewSh(builtins, splitfn).AllowExec(true)
 	err := sh.Run(ctx, stdio, `go version | wc -l`)
 	if err != nil {
 		log.Fatal(err)
