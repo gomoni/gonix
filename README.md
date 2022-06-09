@@ -1,6 +1,7 @@
 # gonix
 
-Unix userspace written in Go with pipes (and redirection in the future)
+Unix textutils implemented in pure Go, with native pipe and shell parsing
+support. Joins shell with a real programming language.
 
 ## builtins
 
@@ -23,7 +24,31 @@ stdio := pipe.Stdio {
 err = pipe.Run(ctx, stdio, gonix.Cat{}, gonix.Wc{}.Lines())
 ```
 
+## Parse and run shell colon
+
+Provided the name to Filter mapping and a custom split function, code
+parses the command line, builds a slice of filters and executes them.
+
+```go
+ctx := context.Background()
+sh := pipe.NewSh(builtins, splitfn)
+err := sh.Run(ctx, stdio, `cat | wc -l`)
+```
+
+## Execute unknown programs
+
+`AllowExec(true)` execute external command instead of returning an error
+about not found builtin.
+
+```go
+ctx := context.Background()
+sh := pipe.NewSh(builtins, splitfn).AllowExec(true)
+err := sh.Run(ctx, stdio, `go version | wc -l`)
+```
+
 ## As a command line
+
+Can be built and run like busybox or a toybox.
 
 ```sh
 ./gonix cat /etc/passwd /etc/resolv.conf | md5sum
