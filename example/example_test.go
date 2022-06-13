@@ -44,11 +44,11 @@ func ExampleRun_from_args() {
 		Stderr: os.Stderr,
 	}
 	ctx := context.Background()
-	cat, err := cat.FromArgs(nil)
+	cat, err := cat.New().FromArgs(nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	wc, err := wc.FromArgs([]string{"-l"})
+	wc, err := wc.New().FromArgs([]string{"-l"})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func ExampleRun_exec() {
 	ctx := context.Background()
 	cmd := exec.Command("go", "version")
 	goVersion := pipe.NewExec(cmd)
-	wc, err := wc.FromArgs([]string{"-l"})
+	wc, err := wc.New().FromArgs([]string{"-l"})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,8 +85,8 @@ func ExampleRun_exec() {
 // Parsing of the command line
 func ExampleSh_Run() {
 	builtins := map[string]func([]string) (pipe.Filter, error){
-		"cat": func(a []string) (pipe.Filter, error) { return cat.FromArgs(a) },
-		"wc":  func(a []string) (pipe.Filter, error) { return wc.FromArgs(a) },
+		"cat": func(a []string) (pipe.Filter, error) { return cat.New().FromArgs(a) },
+		"wc":  func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
 	}
 	splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
 	stdio := pipe.Stdio{
@@ -108,7 +108,7 @@ func ExampleSh_Run() {
 // Parsing of the command line with exec enabled
 func ExampleSh_Run_exec() {
 	builtins := map[string]func([]string) (pipe.Filter, error){
-		"wc": func(a []string) (pipe.Filter, error) { return wc.FromArgs(a) },
+		"wc": func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
 	}
 	splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
 	stdio := pipe.Stdio{

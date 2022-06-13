@@ -14,29 +14,23 @@ import (
 
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/pipe"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/spf13/pflag"
 )
 
-/*
-   -A, --show-all
-          equivalent to -vET
-
-   -e     equivalent to -vE
-
-   -t     equivalent to -vT
-
-   -v, --show-nonprinting
-          use ^ and M- notation, except for LFD and TAB
-*/
 type number int
 
 const (
 	None     number = 0
 	NonBlank number = 1
 	All      number = 2
+)
+
+var (
+	ErrNothingToDo = pipe.NewErrorf(1, "cat: nothing to do")
 )
 
 type Cat struct {
@@ -54,17 +48,16 @@ func New() *Cat {
 }
 
 // FromArgs build a CatFilter from standard argv except the command name (os.Argv[1:])
-func FromArgs(argv []string) (*Cat, error) {
-	cmd := &Cat{}
+func (c *Cat) FromArgs(argv []string) (*Cat, error) {
 	flag := pflag.FlagSet{}
 
 	nb := flag.BoolP("number-nonblank", "b", false, "number non blank lines only")
-	flag.BoolVarP(&cmd.showEnds, "show-ends", "E", false, "print $ at the end of each line")
+	flag.BoolVarP(&c.showEnds, "show-ends", "E", false, "print $ at the end of each line")
 	na := flag.BoolP("number", "n", false, "number all lines")
-	flag.BoolVarP(&cmd.squeezeBlanks, "squeeze-blanks", "s", false, "ignore repeated blank lines")
+	flag.BoolVarP(&c.squeezeBlanks, "squeeze-blanks", "s", false, "ignore repeated blank lines")
 	flag.Bool("u", false, "ignored, for compatibility with POSIX")
-	flag.BoolVarP(&cmd.showTabs, "show-tabs", "T", false, "print TAB as ^I")
-	flag.BoolVarP(&cmd.showNonPrinting, "show-nonprinting", "-v", false, "use ^ and M- notation for non printing characters")
+	flag.BoolVarP(&c.showTabs, "show-tabs", "T", false, "print TAB as ^I")
+	flag.BoolVarP(&c.showNonPrinting, "show-nonprinting", "v", false, "use ^ and M- notation for non printing characters")
 
 	// compound options
 	var all, e, t bool
@@ -73,29 +66,29 @@ func FromArgs(argv []string) (*Cat, error) {
 	flag.BoolVarP(&e, "e", "e", false, "equivalent of -vE")
 	flag.BoolVarP(&t, "t", "t", false, "equivalent of -vT")
 	if all {
-		cmd.ShowNonPrinting(true).ShowEnds(true).ShowTabs(true)
+		c.ShowNonPrinting(true).ShowEnds(true).ShowTabs(true)
 	}
 	if e {
-		cmd.ShowNonPrinting(true).ShowEnds(true)
+		c.ShowNonPrinting(true).ShowEnds(true)
 	}
 	if t {
-		cmd.ShowNonPrinting(true).ShowTabs(true)
+		c.ShowNonPrinting(true).ShowTabs(true)
 	}
 
 	err := flag.Parse(argv)
 	if err != nil {
-		return nil, err
+		return nil, pipe.NewErrorf(1, "cat: parsing failed: %w", err)
 	}
-	cmd.files = flag.Args()
+	c.files = flag.Args()
 
 	// post process
 	if *nb {
-		cmd.ShowNumber(NonBlank)
+		c.ShowNumber(NonBlank)
 	} else if *na {
-		cmd.ShowNumber(NonBlank)
+		c.ShowNumber(NonBlank)
 	}
 
-	return cmd, nil
+	return c, nil
 }
 
 // Files are input files, where - denotes stdin
@@ -163,7 +156,7 @@ func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 		filters = append(filters, catNonPrinting{})
 	}
 	if len(filters) == 0 {
-		return fmt.Errorf("cat: nothing to do")
+		return ErrNothingToDo
 	}
 
 	files := c.files
@@ -171,6 +164,7 @@ func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 		files = []string{""}
 	}
 
+	var errs error
 	for _, f := range files {
 		var in io.ReadCloser
 		if f == "" || f == "-" {
@@ -179,6 +173,7 @@ func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 			f, err := os.Open(f)
 			if err != nil {
 				fmt.Fprintf(stdio.Stderr, "%s\n", err)
+				errs = multierror.Append(errs, err)
 				continue
 			}
 			defer f.Close()
@@ -189,9 +184,12 @@ func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 			Stdout: stdio.Stdout,
 			Stderr: stdio.Stderr}, filters...)
 		if err != nil {
-			return err
+			return pipe.NewError(1, fmt.Errorf("cat: fail to run: %w", err))
 		}
 
+	}
+	if errs != nil {
+		return pipe.NewError(1, errs)
 	}
 	return nil
 }
@@ -308,6 +306,9 @@ func (_ catNonPrinting) Run(ctx context.Context, stdio pipe.Stdio) error {
 	var inp [4096]byte
 	var out bytes.Buffer
 	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		n, err := stdio.Stdin.Read(inp[:])
 		if err == io.EOF {
 			return nil

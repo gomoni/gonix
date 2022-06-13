@@ -27,6 +27,7 @@ type Sh struct {
 	builtins  Builtins
 	splitfn   SplitFn
 	missingfn missingFn
+	pipe      *Pipe
 }
 
 // NewSh creates an instance of a Sh with specified set of builtins and a split
@@ -36,6 +37,7 @@ func NewSh(builtins Builtins, splitfn SplitFn) *Sh {
 		builtins:  builtins,
 		splitfn:   splitfn,
 		missingfn: notFound,
+		pipe:      New(),
 	}
 }
 
@@ -44,6 +46,13 @@ func NewSh(builtins Builtins, splitfn SplitFn) *Sh {
 // if command not found.
 func (s *Sh) AllowExec(b bool) *Sh {
 	s.missingfn = execFn
+	return s
+}
+
+// Pipefail is equivalent of bash set -o pipefail. Sh by default fails on error. Use
+// false to get shell-like behavior.
+func (s *Sh) Pipefail(b bool) *Sh {
+	s.pipe.Pipefail(b)
 	return s
 }
 
@@ -67,6 +76,7 @@ func (s Sh) Parse(cmdline string) ([]Filter, error) {
 		fromArgs, ok := s.builtins[arg0]
 		if !ok {
 			fromArgs, err = s.missingfn(arg0)
+			// TODO: man 1p exit defined codes 127
 			if err != nil {
 				return nil, err
 			}
@@ -96,7 +106,7 @@ func (s Sh) Run(ctx context.Context, stdio Stdio, cmdline string) error {
 	if err != nil {
 		return err
 	}
-	return Run(ctx, stdio, filters...)
+	return s.pipe.Run(ctx, stdio, filters...)
 }
 
 func nextPipe(args []string) int {

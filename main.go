@@ -15,8 +15,8 @@ var tools map[string]func([]string) (pipe.Filter, error)
 
 func init() {
 	tools = map[string]func([]string) (pipe.Filter, error){
-		"cat": func(a []string) (pipe.Filter, error) { return cat.FromArgs(a) },
-		"wc":  func(a []string) (pipe.Filter, error) { return wc.FromArgs(a) },
+		"cat": func(a []string) (pipe.Filter, error) { return cat.New().FromArgs(a) },
+		"wc":  func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
 	}
 }
 

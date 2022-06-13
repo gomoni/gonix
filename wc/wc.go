@@ -20,6 +20,7 @@ import (
 
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/pipe"
+	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/pflag"
 )
 
@@ -54,27 +55,25 @@ func New() *Wc {
 }
 
 // FromArgs builds a WcFilter from standard argv except the command name (os.Argv[1:])
-func FromArgs(argv []string) (*Wc, error) {
-	cmd := &Wc{}
-
+func (c *Wc) FromArgs(argv []string) (*Wc, error) {
 	if len(argv) == 0 {
-		cmd = cmd.Bytes(true).Lines(true).Words(true)
-		return cmd, nil
+		c = c.Bytes(true).Lines(true).Words(true)
+		return c, nil
 	}
 
 	flag := pflag.FlagSet{}
-	flag.BoolVarP(&cmd.bytes, "bytes", "c", false, "print number of bytes")
-	flag.BoolVarP(&cmd.chars, "chars", "m", false, "print number of characters (runes)")
-	flag.BoolVarP(&cmd.lines, "lines", "l", false, "print number of lines")
-	flag.BoolVarP(&cmd.maxLineLength, "max-line-length", "L", false, "print maximum display width")
-	flag.BoolVarP(&cmd.words, "words", "w", false, "print number of words")
+	flag.BoolVarP(&c.bytes, "bytes", "c", false, "print number of bytes")
+	flag.BoolVarP(&c.chars, "chars", "m", false, "print number of characters (runes)")
+	flag.BoolVarP(&c.lines, "lines", "l", false, "print number of lines")
+	flag.BoolVarP(&c.maxLineLength, "max-line-length", "L", false, "print maximum display width")
+	flag.BoolVarP(&c.words, "words", "w", false, "print number of words")
 
 	err := flag.Parse(argv)
 	if err != nil {
-		return nil, err
+		return nil, pipe.NewErrorf(1, "wc: parsing failed: %w", err)
 	}
 
-	return cmd, nil
+	return c, nil
 }
 
 func (w *Wc) Bytes(b bool) *Wc {
@@ -123,6 +122,7 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 	stat := make([]stats, 0, len(c.files))
 	total := stats{fileName: "total"}
 
+	var errs error
 	for _, f := range files {
 		var in io.ReadCloser
 		if f == "" || f == "-" {
@@ -131,6 +131,7 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 			f, err := os.Open(f)
 			if err != nil {
 				fmt.Fprintf(stdio.Stderr, "%s\n", err)
+				errs = multierror.Append(errs, err)
 				continue
 			}
 			defer f.Close()
@@ -139,6 +140,7 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 		st, err := c.runFile(ctx, in, debug)
 		if err != nil {
 			fmt.Fprintf(stdio.Stderr, "%s\n", err)
+			errs = multierror.Append(errs, err)
 			continue
 		}
 		st.fileName = f
@@ -169,7 +171,11 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 			args = append(args, fn(stat[0]))
 		}
 		fmt.Fprintf(w, template, args...)
-		return w.Flush()
+		err := w.Flush()
+		if err != nil {
+			return pipe.NewErrorf(1, "wc: pipe flush: %w", err)
+		}
+		return nil
 	}
 
 	stat = append(stat, total)
@@ -184,10 +190,13 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 
 	err := w.Flush()
 	if err != nil {
-		return err
+		return pipe.NewErrorf(1, "wc: tabwriter flush: %w", err)
 	}
 
 	debug.Printf("exiting")
+	if errs != nil {
+		return pipe.NewError(1, errs)
+	}
 	return nil
 }
 

@@ -20,16 +20,18 @@ package pipe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
 
+	"github.com/gomoni/gonix/internal"
 	"github.com/hashicorp/go-multierror"
 )
 
 // Stdio describes standard io streams for commands
 type Stdio struct {
-	Stdin  io.ReadCloser
+	Stdin  io.ReadCloser // TODO: is this needed?
 	Stdout io.Writer
 	Stderr io.Writer
 }
@@ -40,11 +42,39 @@ type Filter interface {
 	Run(context.Context, Stdio) error
 }
 
+type Pipe struct {
+	noPipeFail bool
+	debug      bool
+}
+
+func New() *Pipe {
+	return &Pipe{
+		noPipeFail: false,
+	}
+}
+
+// Pipefail false continues the colon even in a case of an error. If true the only errors which
+// stops colon are context.Canceled and context.DeadlineExceeded.
+func (p *Pipe) Pipefail(b bool) *Pipe {
+	p.noPipeFail = !b
+	return p
+}
+
+func (p *Pipe) SetDebug(b bool) *Pipe {
+	p.debug = b
+	return p
+}
+
 // Run executes the colon. It connects first Filter to stdin and last to stdout and connects
 // stdin/stdout via io.Pipe. Standard error is passed through. Every filter runs inside own
 // goroutine. If any returns an error, all are canceled too and an error is returned.
-func Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
-	var err error
+//
+// On default Pipefail(true) is setup, Run returns {firstNonZeroExitCode, all errors}.
+// On Pipefail(false), Run returns {lastExitCode, all errors}. So {Code: 0, Err: something}
+// is possible in this case.
+func (p Pipe) Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
+	debug := internal.Logger(p.debug, "gonix.pipe", stdio.Stderr)
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -55,21 +85,12 @@ func Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
 		return cmds[0].Run(ctx, stdio)
 	}
 
-	// else more cmds
-	errs := make(chan error, 1)
-	go func(errs <-chan error) {
-		for {
-			select {
-			case e := <-errs:
-				cancel()
-				err = multierror.Append(err, e)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}(errs)
-
 	var wg sync.WaitGroup
+	var lastCode uint8 = 0     // exit code of a last started Filter
+	var firstNonZero uint8 = 0 // first non zero exit code
+	var nonzeroOnce sync.Once
+
+	errChan := make(chan error, len(cmds))
 
 	in := stdio.Stdin
 	for idx, cmd := range cmds {
@@ -84,20 +105,80 @@ func Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
 			nextIn = pipeR
 		}
 		wg.Add(1)
-		go func(cmd Filter, errs chan<- error, stdin io.ReadCloser, stdout io.WriteCloser) {
+		isLast := idx == len(cmds)-1
+		go func(cancel context.CancelFunc, noPipeFail bool, cmd Filter, errChan chan<- error, stdin io.ReadCloser, stdout io.WriteCloser) {
 			defer wg.Done()
 			defer stdin.Close()
 			defer stdout.Close()
-			err := cmd.Run(ctx, Stdio{stdin, stdout, stdio.Stderr})
-			if err != nil {
-				errs <- err
+
+			// XXX TODO FIXME: his it possible for go to deal with a failed predecessor?
+			// use atomics?
+			if !p.noPipeFail && firstNonZero != 0 {
+				// TODO: return an error here?
+				return
 			}
-		}(cmd, errs, in, out)
+
+			err := cmd.Run(ctx, Stdio{stdin, stdout, stdio.Stderr})
+			errChan <- err
+			if isLast && err != nil {
+				lastCode = AsError(err).Code
+			}
+			if err != nil {
+				nonzeroOnce.Do(func() {
+					firstNonZero = AsError(err).Code
+				})
+				if noPipeFail {
+					if errors.Is(err, context.Canceled) ||
+						errors.Is(err, context.DeadlineExceeded) {
+						debug.Printf("noPipeFail=true, calling cancel on non nil err=%+v", err)
+						cancel()
+					}
+				} else {
+					debug.Printf("noPipeFail=false, calling cancel on non nil err=%+v", err)
+					cancel()
+				}
+			}
+
+		}(cancel, p.noPipeFail, cmd, errChan, in, out)
 		in = nextIn
 	}
 
 	wg.Wait()
-	return err
+
+	var errs error
+	for i := 0; i != len(cmds); i++ {
+		select {
+		case e := <-errChan:
+			if e != nil {
+				errs = multierror.Append(errs, e)
+			}
+		default:
+			break
+		}
+	}
+	close(errChan)
+
+	if firstNonZero != 0 {
+		debug.Printf("pipe.Run: firstNonZero != 0")
+		if p.noPipeFail {
+			// no pipe fail: does not cancel colons, returns exit code of last Filter
+			err := NewError(lastCode, errs)
+			debug.Printf("pipe.Run: noPipeFail: lastCode=%d, err=%T %+v", lastCode, err, err)
+			return err
+		} else {
+			// set -o pipefail: return first non zero error
+			err := NewError(firstNonZero, errs)
+			debug.Printf("pipe.Run: PipeFail: firstNonZero=%d, err=%T %+v", firstNonZero, err, err)
+			return err
+		}
+	}
+	debug.Printf("pipe.Run: firstNonZero == 0")
+	return nil
+}
+
+// Run executes the colon through default Pipe. Colon is canceled on error.
+func Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
+	return Pipe{}.Run(ctx, stdio, cmds...)
 }
 
 // newNopCloser returns a ReadCloser with a no-op Close method wrapping

@@ -21,12 +21,12 @@ import (
 func TestWcFromArgs(t *testing.T) {
 
 	wc1 := New().Bytes(true).Lines(true).Words(true)
-	wc2, err := FromArgs([]string{})
+	wc2, err := New().FromArgs([]string{})
 	require.NoError(t, err)
 	require.Equal(t, wc1, wc2)
 
 	wc1 = New().Lines(true)
-	wc2, err = FromArgs([]string{"--lines"})
+	wc2, err = New().FromArgs([]string{"--lines"})
 	require.NoError(t, err)
 	require.Equal(t, wc1, wc2)
 }
@@ -34,7 +34,7 @@ func TestWcFromArgs(t *testing.T) {
 func TestWc(t *testing.T) {
 	threeSmallPigs := test.Testdata(t, "three-small-pigs")
 	test.Parallel(t)
-	dflt, err := FromArgs(nil)
+	dflt, err := New().FromArgs(nil)
 	require.NoError(t, err)
 	testCases := []testCase{
 		{

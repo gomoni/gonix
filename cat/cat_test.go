@@ -5,6 +5,8 @@
 package cat_test
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	. "github.com/gomoni/gonix/cat"
 	"github.com/gomoni/gonix/internal/test"
 	"github.com/gomoni/gonix/pipe"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )
 
@@ -77,6 +80,78 @@ func TestCat(t *testing.T) {
 	}
 
 	test.RunAll(t, testCases)
+}
+
+// TODO: think about how this can be more generic
+func TestError(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("FromArgs error", func(t *testing.T) {
+		_, err := New().FromArgs([]string{"-x"})
+		require.Error(t, err)
+		e := pipe.AsError(err)
+		require.EqualValues(t, 1, e.Code)
+	})
+	t.Run("read error", func(t *testing.T) {
+		cat := New()
+		stdio := pipe.Stdio{
+			Stdin:  &test.IOError{Err: fmt.Errorf("stdin crashed")},
+			Stdout: io.Discard,
+			Stderr: io.Discard,
+		}
+		err := cat.Run(ctx, stdio)
+		require.Error(t, err)
+		e := pipe.AsError(err)
+		require.EqualValues(t, 1, e.Code)
+		require.EqualError(t, e.Err, "cat: fail to run: stdin crashed")
+	})
+	t.Run("write error", func(t *testing.T) {
+		cat := New()
+		stdio := pipe.Stdio{
+			Stdin:  &test.IOError{Reads: [][]byte{{0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xe, 0xf}}},
+			Stdout: &test.IOError{Err: fmt.Errorf("stdout crashed")},
+			Stderr: io.Discard,
+		}
+		err := cat.Run(ctx, stdio)
+		require.Error(t, err)
+		e := pipe.AsError(err)
+		require.EqualValues(t, 1, e.Code)
+		require.EqualError(t, e.Err, "cat: fail to run: stdout crashed")
+	})
+	t.Run("close error", func(t *testing.T) {
+		t.Skipf("TODO: must redefine this ReadCloser usage")
+		cat := New()
+		stdio := pipe.Stdio{
+			Stdin: &test.IOError{
+				Reads:    [][]byte{{0xd, 0xe, 0xa, 0xd, 0xb, 0xe, 0xe, 0xe, 0xf}},
+				CloseErr: fmt.Errorf("close crashed"),
+			},
+			Stdout: &test.IOError{Writes: 1},
+			Stderr: io.Discard,
+		}
+		err := cat.Run(ctx, stdio)
+		require.Error(t, err)
+		e := pipe.AsError(err)
+		require.EqualValues(t, 1, e.Code)
+		require.EqualError(t, e.Err, "cat: fail to run: close crashed")
+	})
+	t.Run("file not found", func(t *testing.T) {
+		// main.c is guaranteed to not exists, because this is pure Go and compiler
+		// will complain otherwise
+		// package github.com/gomoni/gonix/cat: C source files not allowed when not using cgo or SWIG: main.c
+		cat := New().Files("main.c")
+		stdio := pipe.Stdio{
+			Stdin:  io.NopCloser(strings.NewReader("")),
+			Stdout: io.Discard,
+			Stderr: io.Discard,
+		}
+		err := cat.Run(ctx, stdio)
+		require.Error(t, err)
+		e := pipe.AsError(err)
+		require.EqualValues(t, 1, e.Code)
+		require.Contains(t, e.Err.Error(), "main.c")
+	})
+
 }
 
 type testCase struct {
