@@ -10,6 +10,8 @@
  * TODO: should we pass environ to builtins too?
         idea `FromArgs(env Environ, args ...string)` ???
 
+ * race detector - should be firstNonZero variable atomic?
+
  * what about tasks running other commands?
     `cat /etc/passwd | xargs -L1 timeout 2s printf "%s\n"`
 

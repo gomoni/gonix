@@ -113,10 +113,12 @@ func (p Pipe) Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
 
 			// XXX TODO FIXME: his it possible for go to deal with a failed predecessor?
 			// use atomics?
-			if !p.noPipeFail && firstNonZero != 0 {
-				// TODO: return an error here?
-				return
-			}
+			/*
+				if !p.noPipeFail && firstNonZero != 0 {
+					// TODO: return an error here?
+					return
+				}
+			*/
 
 			err := cmd.Run(ctx, Stdio{stdin, stdout, stdio.Stderr})
 			errChan <- err
