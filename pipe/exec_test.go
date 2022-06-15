@@ -24,7 +24,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestExecNotFound(t *testing.T) {
-	e := NewExec(exec.Command("xgox", "version"))
+	ex := NewExec(exec.Command("xgox", "version"))
 	var out strings.Builder
 	stdio := Stdio{
 		Stdin:  os.Stdin,
@@ -32,8 +32,47 @@ func TestExecNotFound(t *testing.T) {
 		Stderr: os.Stderr,
 	}
 	ctx := context.Background()
-	err := e.Run(ctx, stdio)
+	err := ex.Run(ctx, stdio)
 	require.Error(t, err)
-	// TODO: convert to pipe.Error - check the right error codes
 	require.EqualError(t, err, `exec: "xgox": executable file not found in $PATH`)
+	e := AsError(err)
+	require.EqualValues(t, NotFound, e.Code)
+	require.EqualError(t, e.Err, `exec: "xgox": executable file not found in $PATH`)
+}
+
+func TestExecNotExecutable(t *testing.T) {
+	ex := NewExec(exec.Command("/dev/null", "version"))
+	var out strings.Builder
+	stdio := Stdio{
+		Stdin:  os.Stdin,
+		Stdout: &out,
+		Stderr: os.Stderr,
+	}
+	ctx := context.Background()
+	err := ex.Run(ctx, stdio)
+	require.Error(t, err)
+
+	e := AsError(err)
+	require.EqualValues(t, NotExecutable, e.Code)
+	require.EqualError(t, err, "fork/exec /dev/null: permission denied")
+}
+
+func TestEnviron(t *testing.T) {
+
+	e := DuplicateEnviron()
+	require.ElementsMatch(t, e.Environ(), os.Environ())
+
+	e = NewEnviron("USER", "HOME", "$SHELL")
+	require.LessOrEqual(t, len(e.Environ()), 3)
+
+	e = NewEnviron()
+	e.Set("FOO", "BAR")
+	require.Len(t, e.Environ(), 1)
+	e.Set("BAR", "BAZ")
+	require.Len(t, e.Environ(), 2)
+	e.Unset("NONE")
+	require.Len(t, e.Environ(), 2)
+	e.Unset("FOO")
+	require.Len(t, e.Environ(), 1)
+
 }

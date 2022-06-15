@@ -118,7 +118,8 @@ func ExampleSh_Run_exec() {
 	}
 	ctx := context.Background()
 
-	sh := pipe.NewSh(builtins, splitfn).AllowExec(true)
+	env := pipe.DuplicateEnviron()
+	sh := pipe.NewSh(builtins, splitfn).NotFoundFunc(env.NotFoundFunc)
 	err := sh.Run(ctx, stdio, `go version | wc -l`)
 	if err != nil {
 		log.Fatal(err)

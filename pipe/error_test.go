@@ -30,8 +30,8 @@ func TestError(t *testing.T) {
 	t.Run("as error", func(t *testing.T) {
 		err = errors.New("random error")
 		e = AsError(err)
-		require.EqualValues(t, 255, e.Code)
+		require.EqualValues(t, UnknownError, e.Code)
 		require.EqualError(t, e.Err, "random error")
-		require.EqualError(t, e, "Error{Code: 255, Err: random error}")
+		require.EqualError(t, e, "Error{Code: 250, Err: random error}")
 	})
 }

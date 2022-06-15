@@ -13,14 +13,11 @@ import (
 
 var tools map[string]func([]string) (pipe.Filter, error)
 
-func init() {
+func main() {
 	tools = map[string]func([]string) (pipe.Filter, error){
 		"cat": func(a []string) (pipe.Filter, error) { return cat.New().FromArgs(a) },
 		"wc":  func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
 	}
-}
-
-func main() {
 
 	args := os.Args
 	if len(args) == 0 {

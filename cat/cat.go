@@ -302,7 +302,7 @@ func (c cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 // catNonPrinting converts non printable characters to ^ M- codes
 type catNonPrinting struct{}
 
-func (_ catNonPrinting) Run(ctx context.Context, stdio pipe.Stdio) error {
+func (catNonPrinting) Run(ctx context.Context, stdio pipe.Stdio) error {
 	var inp [4096]byte
 	var out bytes.Buffer
 	for {
