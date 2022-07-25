@@ -13,10 +13,10 @@ import (
 	"os"
 
 	"github.com/gomoni/gonix/internal"
+	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/hashicorp/go-multierror"
 
-	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/spf13/pflag"
 )
@@ -138,7 +138,7 @@ func (c Cat) modifyStdout() bool {
 }
 
 func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := internal.Logger(c.debug, "cat", stdio.Stderr)
+	debug := dbg.Logger(c.debug, "cat", stdio.Stderr)
 	var filters []pipe.Filter
 	if !c.modifyStdout() {
 		filters = []pipe.Filter{cat{debug: c.debug}}
@@ -149,7 +149,7 @@ func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 		}
 		filters = make([]pipe.Filter, len(progs))
 		for idx, prog := range progs {
-			filters[idx] = awkInternal{prog}
+			filters[idx] = internal.NewAWK(prog)
 		}
 	}
 	if c.showNonPrinting {
@@ -259,28 +259,12 @@ func (c Cat) awk(debug *log.Logger) ([]*parser.Program, error) {
 	return progs, nil
 }
 
-// awkInternal - maybe this will morph to bigger awk command, but for know lets
-// keep it here in order to reuse Run functionality of a multiple awk programs
-type awkInternal struct {
-	prog *parser.Program
-}
-
-func (c awkInternal) Run(ctx context.Context, stdio pipe.Stdio) error {
-	config := &interp.Config{
-		Stdin:  stdio.Stdin,
-		Output: stdio.Stdout,
-		Error:  stdio.Stderr,
-	}
-	_, err := interp.ExecProgram(c.prog, config)
-	return err
-}
-
 type cat struct {
 	debug bool
 }
 
 func (c cat) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := internal.Logger(c.debug, "cat", stdio.Stderr)
+	debug := dbg.Logger(c.debug, "cat", stdio.Stderr)
 	const n = 8192
 	for {
 		wb, err := io.CopyN(stdio.Stdout, stdio.Stdin, n)
