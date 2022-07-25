@@ -18,7 +18,7 @@ import (
 	"text/tabwriter"
 	"unicode/utf8"
 
-	"github.com/gomoni/gonix/internal"
+	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/pflag"
@@ -113,7 +113,7 @@ func (w *Wc) SetDebug(debug bool) *Wc {
 }
 
 func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := internal.Logger(c.debug, "wc", stdio.Stderr)
+	debug := dbg.Logger(c.debug, "wc", stdio.Stderr)
 
 	files := c.files
 	if len(files) == 0 {

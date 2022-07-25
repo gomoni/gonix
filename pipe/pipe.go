@@ -25,7 +25,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/gomoni/gonix/internal"
+	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/hashicorp/go-multierror"
 )
 
@@ -73,7 +73,7 @@ func (p *Pipe) SetDebug(b bool) *Pipe {
 // On Pipefail(false), Run returns {lastExitCode, all errors}. So {Code: 0, Err: something}
 // is possible in this case.
 func (p Pipe) Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
-	debug := internal.Logger(p.debug, "gonix.pipe", stdio.Stderr)
+	debug := dbg.Logger(p.debug, "gonix.pipe", stdio.Stderr)
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
