@@ -1,60 +1,90 @@
-# gonix
+# gonix: unix as a Go library
 
-Unix textutils implemented in pure Go including pipe support, execution of
-external programs and highly configurable "shell" environment. Compiles to
-busybox-like CLI program as well as usable as a Go library.
+Unix text utilities implemented in pure Go and an excellent [github.com/benhoyt/goawk](https://github.com/benhoyt/goawk)
 
-> Use shell colons from real programming language
+ * ✔ Go library
+ * ✔ Native pipes in Go
+ * ✔ Flexible shell colon parsing and execution
+ * ✔ Busybox-like command line tool
+ * ⚠ not yet guaranteed to be stable, API may change
 
-# How to install
+# Go library
 
-Beware: it is in alpha status - some aspects can change.
-
-```
-git clone github.com/gomoni/gonix
-```
-
-## Run unix shell colon inside Go
-
-Provided the name to Filter mapping and a custom split function, code parses
-the command line, builds a slice of filters and executes them. Both `cat` and
-`wc` are implemented in Go compatible with GNU counterparts.
+Each tool can be called from Go code.
 
 ```go
-// run builtin cat and wc exported as Go native structs with custom stdio
-var out bytes.Buffer
-stdio := pipe.Stdio {
-    Stdin: os.Stdin,
-    Stdout: out,
-    Stderr: os.Stderr,
-}
-
-ctx := context.Background()
-sh := pipe.NewSh(builtins, splitfn)
-err := sh.Run(ctx, stdio, `cat | wc -l`)
+	// printf "three\nsmall\npigs\n" | head --lines 2
+	head := head.New().Lines(2)
+	err := head.Run(context.TODO(), pipe.Stdio{
+		Stdin:  io.NopCloser(bytes.NewBufferString("three\nsmall\npigs\n")),
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Output:
+	// three
+	// small
 ```
 
-## Without string parsing
+# Native pipes in Go
 
-This is an equivalent without string parsing.
+Unix is unix because of a `pipe(2)` allowing seamless combination of all unix filters into longer colons.
+`gonix` has `pipe.Run` allowing to connect and arbitrary number of filters. It connects stdint/stdout
+automatically like unix `sh(1)` do.
+
+
 
 ```go
-err = pipe.Run(ctx, stdio, cat.New(), wc.New().Lines(true))
+	// printf "three\nsmall\npigs\n" | cat | wc -l
+	stdio := pipe.Stdio{
+		Stdin:  io.NopCloser(bytes.NewBufferString("three\nsmall\npigs\n")),
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+	err := pipe.Run(context.TODO(), stdio, cat.New(), wc.New().Lines(true))
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Output:
+	// 3
 ```
 
-## Execute programs + environment
+## Flexible shell colon parsing and execution
 
-Gonix does not execute unknown programs by default. `pipe.Environ` helper allows
-a detailed specification of an environment and passing it to executable.
+Most unix colons exists in shell compatible format. `gonix` provides helpers which can split the shell
+syntax into equivalent Go code. Code can
+
+* ✔ control which names will be mapped into native Go code
+* ✔ supports own split function (while [github.com/desertbit/go-shlex](https://github.com/desertbit/go-shlex) is probably the best)
+* ✔ control what to do if command name is not found
+* ✔ support  `PATH` lookups and binaries execution like shell does, disabled by default
+* ✔ control environment variables
 
 ```go
-ctx := context.Background()
-env := pipe.DuplicateEnviron()
-sh := pipe.NewSh(builtins, splitfn).NotFoundFunc(env.NotFoundFunc)
-err := sh.Run(ctx, stdio, `go version | wc -l`)
+	builtins := map[string]func([]string) (pipe.Filter, error){
+		"wc": func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
+	}
+	splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
+	stdio := pipe.Stdio{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+	ctx := context.Background()
+
+	env := pipe.DuplicateEnviron()
+	sh := pipe.NewSh(builtins, splitfn).NotFoundFunc(env.NotFoundFunc)
+	err := sh.Run(ctx, stdio, `go version | wc -l`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Output:
+	// 1
 ```
 
-## As a command line
+## Busybox-like command line tool
 
 Can be built and run like busybox or a toybox.
 
@@ -62,7 +92,13 @@ Can be built and run like busybox or a toybox.
 ./gonix cat /etc/passwd /etc/resolv.conf | md5sum
 ```
 
-## builtins
+# Builtins
 
  * cat - the basic command - uses goawk under the hood
  * wc - word count
+ * head -n/--lines - uses [goawk](https://github.com/gomoni/gonix/blob/main/head/head_negative.awk)
+ 
+# Other interesting projects
+ * ♥ [github.com/benhoyt/goawk](https://github.com/benhoyt/goawk) an excellent awk implementation for Go
+ * [github.com/desertbit/go-shlex](https://github.com/desertbit/go-shlex) probably the best sh lexing library for Go
+ * [github.com/u-root/u-root](https://github.com/u-root/u-root) full Go userland for bootloaders, similar idea, not providing a library
