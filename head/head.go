@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strconv"
 
@@ -35,7 +36,7 @@ type Head struct {
 
 func New() *Head {
 	return &Head{
-		debug: true,
+		debug: false,
 		lines: 10}
 }
 
@@ -46,15 +47,19 @@ func (c *Head) FromArgs(argv []string) (*Head, error) {
 
 	err := flag.Parse(argv)
 	if err != nil {
-		return nil, pipe.NewErrorf(1, "wc: parsing failed: %w", err)
+		return nil, pipe.NewErrorf(1, "head: parsing failed: %w", err)
 	}
 	c.files = flag.Args()
 
-	n, err := strconv.Atoi(*an)
+	n, err := internal.ParseByte(*an)
 	if err != nil {
-		return nil, pipe.NewErrorf(1, "wc: %w", err)
+		return nil, pipe.NewErrorf(1, "head: %w", err)
 	}
-	c.lines = n
+	if float64(n) > float64(1<<63) {
+		return nil, pipe.NewErrorf(1, "head: size overflow %f", math.Round(float64(n)))
+	}
+	// TODO: deal with more than int64 lines?
+	c.lines = int(math.Round(float64(n)))
 
 	return c, nil
 }

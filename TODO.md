@@ -4,9 +4,6 @@
 
  * do one need to use ReadCloser for Stdio?
 
- * Exec: environment handling dome - helper pipe.Environ
- * Sh propagate it to pipe.Exec
- * TODO: should NotFoundFunc belong to Environ struct?
  * TODO: should we pass environ to builtins too?
         idea `FromArgs(env Environ, args ...string)` ???
 
@@ -18,9 +15,8 @@
 
  * implement and a shell scripting builtins like until?
 
- * GHA + golangci-lint
  * Add (a basic) tr
- * Add (a basic) head/tail
+ * Add (a basic) tail
  * Add sort --version-sort
  * Add (a basic) grep
  * Add wrapper for goawk

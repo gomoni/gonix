@@ -7,47 +7,47 @@ package pipe
 import (
 	"context"
 	"fmt"
-	"os/exec"
 )
 
-// SplitFn is a function used to split shell command line to individual elements
+// SplitFunc is a function used to split shell command line to individual elements
 // github.com/desertbit/go-shlex is an example of a good parsing function
-type SplitFn func(string) ([]string, error)
+type SplitFunc func(string) ([]string, error)
 
 // Builtins is a typedef for a map of a command name to a builtin function
 // which construct a command from list of arguments
 type Builtins = map[string]func([]string) (Filter, error)
 
-type FromArgsFn func([]string) (Filter, error)
+// FromArgsFunc returns the configured filter from command line arguments
+type FromArgsFunc func([]string) (Filter, error)
 
 // NotFoundFn is called on an unknown command
-type NotFoundFn func(string) (FromArgsFn, error)
+type NotFoundFunc func(string) (FromArgsFunc, error)
 
 // Sh contains a configuration for command line parsing and running. It maps
 // shell command line to individual Filters and allows one to execute a colon.
 type Sh struct {
 	builtins   Builtins
-	splitfn    SplitFn
-	notFoundFn NotFoundFn
+	splitfn    SplitFunc
+	notFoundFn NotFoundFunc
 	pipe       *Pipe
 }
 
 // NewSh creates an instance of a Sh with specified set of builtins and a split
 // function
-func NewSh(builtins Builtins, splitfn SplitFn) *Sh {
+func NewSh(builtins Builtins, splitfn SplitFunc) *Sh {
 	return &Sh{
 		builtins:   builtins,
 		splitfn:    splitfn,
-		notFoundFn: NotFoundFunc,
+		notFoundFn: DefaultNotFoundFunc,
 		pipe:       New(),
 	}
 }
 
-// NotFoundFunc with true replaces every not found command by Exec filter,
-// making it working similarly to a real shell. False means to throw an error
-// if command not found.
-func (s *Sh) NotFoundFunc(f NotFoundFn) *Sh {
-	s.notFoundFn = f
+// NotFoundFunc setups the handler, which can deal with unknown commands
+// [DefaultNotFoundFunc] (the default) returns an error for each command
+// [Environ.ExecFunc] try to execute them via [exec.Command]
+func (s *Sh) NotFoundFunc(fn NotFoundFunc) *Sh {
+	s.notFoundFn = fn
 	return s
 }
 
@@ -119,21 +119,10 @@ func nextPipe(args []string) int {
 	return len(args)
 }
 
-func NotFoundFunc(arg0 string) (FromArgsFn, error) {
+// DefaultNotFoundFunc returns error NotFound for every not found builtin
+func DefaultNotFoundFunc(arg0 string) (FromArgsFunc, error) {
 	err := fmt.Errorf("can't run %q: %w", arg0, ErrBuiltinNotFound)
 	return func([]string) (Filter, error) {
 		return nil, Error{Code: NotFound, Err: err}
 	}, err
-}
-
-// TODO: FIXME - this mixes pipe.Environ and exec.Command together. Shall it be
-// an another struct?
-// NotFoundFunc with initialized environment
-func (e Environ) NotFoundFunc(arg0 string) (FromArgsFn, error) {
-	fromArgs := func(args []string) (Filter, error) {
-		cmd := exec.Command(arg0, args...)
-		cmd.Env = e.Environ()
-		return NewExec(cmd), nil
-	}
-	return fromArgs, nil
 }

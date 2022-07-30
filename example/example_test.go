@@ -13,6 +13,7 @@ import (
 	"os/exec"
 
 	"github.com/gomoni/gonix/cat"
+	"github.com/gomoni/gonix/head"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/gomoni/gonix/wc"
 
@@ -119,11 +120,26 @@ func ExampleSh_Run_exec() {
 	ctx := context.Background()
 
 	env := pipe.DuplicateEnviron()
-	sh := pipe.NewSh(builtins, splitfn).NotFoundFunc(env.NotFoundFunc)
+	sh := pipe.NewSh(builtins, splitfn).NotFoundFunc(env.ExecFunc)
 	err := sh.Run(ctx, stdio, `go version | wc -l`)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Output:
 	// 1
+}
+
+func ExampleHead_Run() {
+	head := head.New().Lines(2)
+	err := head.Run(context.TODO(), pipe.Stdio{
+		Stdin:  io.NopCloser(bytes.NewBufferString("three\nsmall\npigs\n")),
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Output:
+	// three
+	// small
 }
