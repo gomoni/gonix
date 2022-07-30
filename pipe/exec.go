@@ -12,10 +12,13 @@ import (
 	"strings"
 )
 
+// ExecFilter implements [Filter] interface for [exec.Cmd] so ordinary commands
+// can be injected into gonix pipe
 type ExecFilter struct {
 	cmd exec.Cmd
 }
 
+// NewExec returns new ExecFilter from exec.Cmd
 func NewExec(cmd *exec.Cmd) *ExecFilter {
 	if cmd == nil {
 		panic("cmd is nil")
@@ -91,4 +94,15 @@ func (e *Environ) Unset(name string) *Environ {
 // Environ exports content as []string for compatibility with exec.Cmd API
 func (e Environ) Environ() []string {
 	return []string(e)
+}
+
+// ExecFunc calls exec.Command for each not builtin command and
+// assigns an environment there
+func (e Environ) ExecFunc(arg0 string) (FromArgsFunc, error) {
+	fromArgs := func(args []string) (Filter, error) {
+		cmd := exec.Command(arg0, args...)
+		cmd.Env = e.Environ()
+		return NewExec(cmd), nil
+	}
+	return fromArgs, nil
 }
