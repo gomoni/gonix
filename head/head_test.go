@@ -12,6 +12,7 @@ import (
 	. "github.com/gomoni/gonix/head"
 	"github.com/gomoni/gonix/internal/test"
 	"github.com/gomoni/gonix/pipe"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHead(t *testing.T) {
@@ -38,6 +39,36 @@ func TestHead(t *testing.T) {
 	}
 
 	test.RunAll(t, testCases)
+}
+
+func TestFromArgs(t *testing.T) {
+	test.Parallel(t)
+	testCases := []struct {
+		name     string
+		args     []string
+		expected *Head
+	}{
+		{
+			"default",
+			nil,
+			New(),
+		},
+		{
+			"lines",
+			[]string{"--lines", "10KiB"},
+			New().Lines(10240),
+		},
+	}
+
+	for _, tt := range testCases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			test.Parallel(t)
+			head, err := New().FromArgs(tt.args)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, head)
+		})
+	}
 }
 
 type testCase struct {

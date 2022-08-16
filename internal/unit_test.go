@@ -148,3 +148,17 @@ func TestParseByteErr(t *testing.T) {
 		})
 	}
 }
+
+func TestSPF13Value(t *testing.T) {
+
+	b := 6*KiloByte + 72*Block
+
+	require.Equal(t, "42864B", b.String())
+
+	var b2 Byte
+	err := b2.Set("10KiB")
+	require.NoError(t, err)
+	require.Equal(t, "10240B", b2.String())
+
+	require.Equal(t, "Byte", b2.Type())
+}

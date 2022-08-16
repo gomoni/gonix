@@ -252,7 +252,25 @@ func ParseByte(s string) (Byte, error) {
 	return Byte(u), err
 }
 
+// https://pkg.go.dev/github.com/spf13/pflag#Value
 func (b Byte) String() string {
-	// TODO:
-	panic("not yet implemented")
+	// TODO: make it better
+	return fmt.Sprintf("%.fB", float64(b))
+}
+
+func (b Byte) Type() string {
+	return "Byte"
+}
+
+func (b *Byte) Set(value string) error {
+	x, err := ParseByte(value)
+	if err != nil {
+		return err
+	}
+
+	if float64(x) > float64(1<<63) {
+		return fmt.Errorf("size overflow %f", math.Round(float64(x)))
+	}
+	*b = x
+	return nil
 }

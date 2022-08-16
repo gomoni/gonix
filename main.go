@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/gomoni/gonix/cat"
+	"github.com/gomoni/gonix/head"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/gomoni/gonix/wc"
 )
@@ -19,8 +20,9 @@ var tools map[string]func([]string) (pipe.Filter, error)
 
 func main() {
 	tools = map[string]func([]string) (pipe.Filter, error){
-		"cat": func(a []string) (pipe.Filter, error) { return cat.New().FromArgs(a) },
-		"wc":  func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
+		"cat":  mkFilterFunc[cat.Cat](cat.New),
+		"head": mkFilterFunc[head.Head](head.New),
+		"wc":   mkFilterFunc[wc.Wc](wc.New),
 	}
 
 	args := os.Args
@@ -54,4 +56,23 @@ func main() {
 		log.Fatal(err)
 	}
 
+}
+
+type filter interface {
+	cat.Cat |
+		head.Head |
+		wc.Wc
+
+	Run(context.Context, pipe.Stdio) error
+}
+
+type arger[T filter] interface {
+	FromArgs([]string) (*T, error)
+}
+
+func mkFilterFunc[F filter, AF arger[F]](newArger func() AF) func([]string) (pipe.Filter, error) {
+	return func(args []string) (pipe.Filter, error) {
+		f, err := newArger().FromArgs(args)
+		return *f, err
+	}
 }

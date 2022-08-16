@@ -37,13 +37,16 @@ type Head struct {
 func New() *Head {
 	return &Head{
 		debug: false,
-		lines: 10}
+		lines: 10,
+		files: []string{},
+	}
 }
 
 func (c *Head) FromArgs(argv []string) (*Head, error) {
 	flag := pflag.FlagSet{}
 
-	an := flag.String("n", "10", "print at least n lines, -n means everything except last n lines")
+	var lines internal.Byte = internal.Byte(c.lines)
+	flag.VarP(&lines, "lines", "n", "print at least n lines, -n means everything except last n lines")
 
 	err := flag.Parse(argv)
 	if err != nil {
@@ -51,15 +54,8 @@ func (c *Head) FromArgs(argv []string) (*Head, error) {
 	}
 	c.files = flag.Args()
 
-	n, err := internal.ParseByte(*an)
-	if err != nil {
-		return nil, pipe.NewErrorf(1, "head: %w", err)
-	}
-	if float64(n) > float64(1<<63) {
-		return nil, pipe.NewErrorf(1, "head: size overflow %f", math.Round(float64(n)))
-	}
-	// TODO: deal with more than int64 lines?
-	c.lines = int(math.Round(float64(n)))
+	// TODO: deal with more than int64 lines
+	c.lines = int(math.Round(float64(lines)))
 
 	return c, nil
 }
