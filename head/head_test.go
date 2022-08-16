@@ -36,6 +36,12 @@ func TestHead(t *testing.T) {
 			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			"1\n2\n",
 		},
+		{
+			"--lines 2 --zero-terminated",
+			New().Lines(2).ZeroTerminated(true),
+			"1\x002\x003\x004\x00",
+			"1\n2\n",
+		},
 	}
 
 	test.RunAll(t, testCases)
@@ -57,6 +63,11 @@ func TestFromArgs(t *testing.T) {
 			"lines",
 			[]string{"--lines", "10KiB"},
 			New().Lines(10240),
+		},
+		{
+			"zero terminated",
+			[]string{"--zero-terminated"},
+			New().ZeroTerminated(true),
 		},
 	}
 
