@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/gomoni/gonix/head"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/gomoni/gonix/wc"
+	"github.com/spf13/pflag"
 )
 
 var tools map[string]func([]string) (pipe.Filter, error)
@@ -40,6 +42,13 @@ func main() {
 	}
 	filter, err := fromArgs(args[1:])
 	if err != nil {
+		var perr pipe.Error
+		if errors.As(err, &perr) {
+			if errors.Is(perr.Err, pflag.ErrHelp) {
+				os.Exit(1)
+				return
+			}
+		}
 		log.Fatal(err)
 	}
 	// implement ctrl+c support
@@ -73,6 +82,9 @@ type arger[T filter] interface {
 func mkFilterFunc[F filter, AF arger[F]](newArger func() AF) func([]string) (pipe.Filter, error) {
 	return func(args []string) (pipe.Filter, error) {
 		f, err := newArger().FromArgs(args)
+		if err != nil {
+			return nil, err
+		}
 		return *f, err
 	}
 }
