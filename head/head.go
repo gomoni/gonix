@@ -29,21 +29,28 @@ var headAwk []byte
 var headNegative []byte
 
 type Head struct {
-	debug bool
-	lines int
-	files []string
+	debug          bool
+	lines          int
+	zeroTerminated bool
+	files          []string
 }
 
 func New() *Head {
 	return &Head{
-		debug: false,
-		lines: 10}
+		debug:          false,
+		lines:          10,
+		zeroTerminated: false,
+		files:          []string{},
+	}
 }
 
 func (c *Head) FromArgs(argv []string) (*Head, error) {
 	flag := pflag.FlagSet{}
 
-	an := flag.String("n", "10", "print at least n lines, -n means everything except last n lines")
+	var lines internal.Byte = internal.Byte(c.lines)
+	flag.VarP(&lines, "lines", "n", "print at least n lines, -n means everything except last n lines")
+
+	zeroTerminated := flag.BoolP("zero-terminated", "z", false, "line delimiter is NUL")
 
 	err := flag.Parse(argv)
 	if err != nil {
@@ -51,15 +58,9 @@ func (c *Head) FromArgs(argv []string) (*Head, error) {
 	}
 	c.files = flag.Args()
 
-	n, err := internal.ParseByte(*an)
-	if err != nil {
-		return nil, pipe.NewErrorf(1, "head: %w", err)
-	}
-	if float64(n) > float64(1<<63) {
-		return nil, pipe.NewErrorf(1, "head: size overflow %f", math.Round(float64(n)))
-	}
-	// TODO: deal with more than int64 lines?
-	c.lines = int(math.Round(float64(n)))
+	// TODO: deal with more than int64 lines
+	c.lines = int(math.Round(float64(lines)))
+	c.zeroTerminated = *zeroTerminated
 
 	return c, nil
 }
@@ -72,6 +73,11 @@ func (c *Head) Files(f ...string) *Head {
 
 func (c *Head) Lines(lines int) *Head {
 	c.lines = lines
+	return c
+}
+
+func (c *Head) ZeroTerminated(zeroTerminated bool) *Head {
+	c.zeroTerminated = zeroTerminated
 	return c
 }
 
@@ -97,6 +103,7 @@ func (c Head) Run(ctx context.Context, stdio pipe.Stdio) error {
 
 	debug.Printf("head: src=`%s`", src)
 	debug.Printf("head: lines=%d", lines)
+	debug.Printf("head: zero-terminated=%t", c.zeroTerminated)
 
 	prog, err := parser.ParseProgram([]byte(src), nil)
 	if err != nil {
@@ -104,6 +111,9 @@ func (c Head) Run(ctx context.Context, stdio pipe.Stdio) error {
 	}
 	awk := internal.NewAWK(prog)
 	awk.SetVariable("lines", strconv.Itoa(lines))
+	if c.zeroTerminated {
+		awk.SetVariable("RS", "\x00")
+	}
 
 	var head func(context.Context, pipe.Stdio, int, string) error
 	if len(c.files) <= 1 {
