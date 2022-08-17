@@ -94,7 +94,8 @@ Can be built and run like busybox or a toybox.
 
 # Builtins
 
- * cat - the basic command - uses goawk under the hood
+ * cat -uses [goawk](https://github.com/benhoyt/goawk)
+ * cksum - POSIX ctx, md5 and sha checksums
  * wc - word count
  * head -n/--lines - uses [goawk](https://github.com/gomoni/gonix/blob/main/head/head_negative.awk)
  

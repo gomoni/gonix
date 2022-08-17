@@ -8,7 +8,6 @@
         idea `FromArgs(env Environ, args ...string)` ???
 
  * race detector - should be firstNonZero variable atomic?
- * split common things from `head/head.go` to `internal`
 
  * what about tasks running other commands?
     `cat /etc/passwd | xargs -L1 timeout 2s printf "%s\n"`

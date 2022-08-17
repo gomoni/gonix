@@ -7,11 +7,13 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/gomoni/gonix/cat"
+	"github.com/gomoni/gonix/cksum"
 	"github.com/gomoni/gonix/head"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/gomoni/gonix/wc"
@@ -22,9 +24,10 @@ var tools map[string]func([]string) (pipe.Filter, error)
 
 func main() {
 	tools = map[string]func([]string) (pipe.Filter, error){
-		"cat":  mkFilterFunc[cat.Cat](cat.New),
-		"head": mkFilterFunc[head.Head](head.New),
-		"wc":   mkFilterFunc[wc.Wc](wc.New),
+		"cat":   mkFilterFunc[cat.Cat](cat.New),
+		"cksum": mkFilterFunc[cksum.CKSum](cksum.New),
+		"head":  mkFilterFunc[head.Head](head.New),
+		"wc":    mkFilterFunc[wc.Wc](wc.New),
 	}
 
 	args := os.Args
@@ -34,6 +37,11 @@ func main() {
 	// strip gonix
 	if filepath.Base(args[0]) == "gonix" {
 		args = args[1:]
+	}
+
+	if len(args) == 0 {
+		fmt.Printf("TODO: usage\n")
+		os.Exit(1)
 	}
 
 	fromArgs, found := tools[args[0]]
@@ -69,6 +77,7 @@ func main() {
 
 type filter interface {
 	cat.Cat |
+		cksum.CKSum |
 		head.Head |
 		wc.Wc
 

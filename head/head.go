@@ -7,16 +7,13 @@ package head
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
-	"os"
 	"strconv"
 
 	"github.com/benhoyt/goawk/parser"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/gomoni/gonix/pipe"
-	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/pflag"
 
 	_ "embed"
@@ -136,76 +133,10 @@ func (c Head) Run(ctx context.Context, stdio pipe.Stdio) error {
 		}
 	}
 
-	runFiles := newRunFiles(
+	runFiles := internal.NewRunFiles(
 		c.files,
 		stdio,
 		head,
 	)
-	err = runFiles.do(ctx)
-	if err != nil {
-		return err
-	}
-	return runFiles.AsPipeError()
-}
-
-// runFiles is a helper run gonix commands with inputs from more files
-// failure in file opening does not break the loop, but returns exit code 1
-// - or empty name are treated as stdin
-type runFiles struct {
-	files []string
-	errs  error
-	stdio pipe.Stdio
-	fun   func(context.Context, pipe.Stdio, int, string) error
-}
-
-func newRunFiles(files []string, stdio pipe.Stdio, fun func(context.Context, pipe.Stdio, int, string) error) runFiles {
-	return runFiles{
-		files: files,
-		stdio: stdio,
-		errs:  nil,
-		fun:   fun,
-	}
-}
-
-func (l *runFiles) do(ctx context.Context) error {
-	if len(l.files) == 0 {
-		return l.doOne(ctx, 0, "")
-	}
-	for idx, name := range l.files {
-		err := l.doOne(ctx, idx, name)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (l *runFiles) doOne(ctx context.Context, idx int, name string) error {
-	var in io.ReadCloser
-	if name == "" || name == "-" {
-		in = l.stdio.Stdin
-	} else {
-		f, err := os.Open(name)
-		if err != nil {
-			fmt.Fprintf(l.stdio.Stderr, "%s\n", err)
-			l.errs = multierror.Append(l.errs, err)
-			return nil
-		}
-		defer f.Close()
-		in = f
-	}
-	return l.fun(ctx, pipe.Stdio{
-		Stdin:  in,
-		Stdout: l.stdio.Stdout,
-		Stderr: l.stdio.Stderr},
-		idx,
-		name,
-	)
-}
-
-func (l runFiles) AsPipeError() error {
-	if l.errs != nil {
-		return pipe.NewError(1, l.errs)
-	}
-	return nil
+	return runFiles.Do(ctx)
 }
