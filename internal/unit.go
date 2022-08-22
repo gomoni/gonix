@@ -187,7 +187,7 @@ func leadingFraction(s string) (x float64, scale float64, rem string) {
 }
 
 // Byte is a size of disk/memory/buffer capacities
-type Byte float64
+type Byte Unit
 
 // Byte may have a multiplier suffix: b 512, kB 1000, K 1024, MB 1000*1000, M
 // 1024*1024, GB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y.
