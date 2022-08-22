@@ -8,6 +8,7 @@
 package cksum
 
 import (
+	"bufio"
 	"context"
 	"crypto/md5"
 	"crypto/sha1"
@@ -17,23 +18,103 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"hash/crc32"
 	"io"
+	"log"
+	"os"
+	"regexp"
+	"strings"
 
 	"github.com/gomoni/gonix/internal"
+	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/gomoni/gonix/pipe"
+	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/pflag"
+	"golang.org/x/crypto/blake2b"
 )
+
+type Algorithm int
+
+const (
+	NONE Algorithm = 0
+	//sysv algorithm = 1
+	//bsd  algorithm = 2
+	CRC     Algorithm = 3
+	MD5     Algorithm = 4
+	SHA1    Algorithm = 5
+	SHA224  Algorithm = 6
+	SHA256  Algorithm = 7
+	SHA384  Algorithm = 8
+	SHA512  Algorithm = 9
+	BLAKE2B Algorithm = 10
+)
+
+// https://pkg.go.dev/github.com/spf13/pflag#Value
+func (a Algorithm) String() string {
+	switch a {
+	case CRC:
+		return `crc`
+	case MD5:
+		return `md5`
+	case SHA1:
+		return `sha1`
+	case SHA224:
+		return `sha224`
+	case SHA256:
+		return `sha256`
+	case SHA384:
+		return `sha1384`
+	case SHA512:
+		return `sha512`
+	case BLAKE2B:
+		return `blake2b`
+	default:
+		return `!unknown`
+	}
+}
+
+func (a Algorithm) Type() string {
+	return "algorithm"
+}
+
+func (a *Algorithm) Set(value string) error {
+	switch value {
+	case `crc`:
+		*a = CRC
+	case `md5`:
+		*a = MD5
+	case `sha1`:
+		*a = SHA1
+	case `sha224`:
+		*a = SHA224
+	case `sha256`:
+		*a = SHA256
+	case `sha384`:
+		*a = SHA384
+	case `sha512`:
+		*a = SHA512
+	case `blake2b`:
+		*a = BLAKE2B
+	default:
+		return fmt.Errorf("invalid argument %q for --algorithm", value)
+	}
+	return nil
+}
 
 type CKSum struct {
 	debug     bool
-	algorithm algorithm
+	algorithm Algorithm
+	check     bool
+	untagged  bool
 	files     []string
 }
 
 func New() *CKSum {
 	return &CKSum{
 		debug:     false,
-		algorithm: acrc,
+		algorithm: NONE,
+		check:     false,
+		untagged:  false,
 		files:     []string{},
 	}
 }
@@ -44,6 +125,21 @@ func (c *CKSum) Files(f ...string) *CKSum {
 	return c
 }
 
+func (c *CKSum) Algorithm(algorithm Algorithm) *CKSum {
+	c.algorithm = algorithm
+	return c
+}
+
+func (c *CKSum) Check(check bool) *CKSum {
+	c.check = true
+	return c
+}
+
+func (c *CKSum) Untagged(untagged bool) *CKSum {
+	c.untagged = untagged
+	return c
+}
+
 func (c *CKSum) SetDebug(debug bool) *CKSum {
 	c.debug = debug
 	return c
@@ -51,8 +147,11 @@ func (c *CKSum) SetDebug(debug bool) *CKSum {
 
 func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	flag := pflag.FlagSet{}
-	var algorithm algorithm
+	var algorithm Algorithm = CRC
 	flag.VarP(&algorithm, "algorithm", "a", "checksum algorithm to use, crc is default")
+	c.check = *flag.BoolP("check", "c", false, "check checksums from file")
+	_ = *flag.Bool("tag", true, "create BSD style checksum (default)")
+	untagged := *flag.Bool("untagged", false, "create checksum without digest type")
 	err := flag.Parse(argv)
 	if err != nil {
 		return nil, pipe.NewErrorf(1, "cksum: parsing failed: %w", err)
@@ -60,16 +159,37 @@ func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	c.files = flag.Args()
 
 	c.algorithm = algorithm
+	if c.algorithm == NONE && !c.check {
+		c.algorithm = CRC
+	}
+
+	if c.algorithm == CRC || untagged {
+		c.untagged = true
+	}
 	return c, nil
 }
 
 func (c CKSum) Run(ctx context.Context, stdio pipe.Stdio) error {
-	//debug := dbg.Logger(c.debug, "cksum", stdio.Stderr)
+	debug := dbg.Logger(c.debug, "cksum", stdio.Stderr)
 
-	var cksum func(context.Context, pipe.Stdio, int, string) error
+	if c.check {
+		debug.Printf("about to call c.checkSum")
+		return c.checkSum(ctx, stdio, debug)
+	}
+	return c.makeSum(ctx, stdio, debug)
+}
+
+func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) error {
+
+	if c.algorithm == NONE {
+		c.algorithm = CRC
+	}
+
+	var makeSum func(context.Context, pipe.Stdio, int, string) error
+
 	switch c.algorithm {
-	case acrc:
-		cksum = func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
+	case CRC:
+		makeSum = func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
 			cksum, size, err := docrc(ctx, stdio)
 			if err != nil {
 				return err
@@ -77,88 +197,73 @@ func (c CKSum) Run(ctx context.Context, stdio pipe.Stdio) error {
 			fmt.Fprintf(stdio.Stdout, "%s %d %s\n", cksum, size, name)
 			return nil
 		}
-	case amd5:
-		cksum = newDigestFunc(md5.New(), "MD5")
-	case asha1:
-		cksum = newDigestFunc(sha1.New(), "SHA1")
-	case asha224:
-		cksum = newDigestFunc(sha256.New224(), "SHA224")
-	case asha256:
-		cksum = newDigestFunc(sha256.New(), "SHA256")
-	case asha384:
-		cksum = newDigestFunc(sha512.New384(), "SHA384")
-	case asha512:
-		cksum = newDigestFunc(sha512.New(), "SHA512")
 	default:
-		return fmt.Errorf("invalid argument %q for --algorithm", c.algorithm)
+		hash, name, ok := c.algorithm.hash()
+		if !ok {
+			return fmt.Errorf("invalid argument %q for --algorithm", c.algorithm)
+		}
+		makeSum = newDigestFunc(hash, name, c.untagged)
 	}
 
 	runFiles := internal.NewRunFiles(
 		c.files,
 		stdio,
-		cksum,
+		makeSum,
 	)
 	return runFiles.Do(ctx)
 }
 
-type algorithm int
+/*
+check is surprisingly complex problem
 
-const (
-	//sysv algorithm = 1
-	//bsd  algorithm = 2
-	acrc    algorithm = 3
-	amd5    algorithm = 4
-	asha1   algorithm = 5
-	asha224 algorithm = 6
-	asha256 algorithm = 7
-	asha384 algorithm = 8
-	asha512 algorithm = 9
-)
+✅ check don't work with crc
+✅ untagged format
+✅ untagged format requires explicit --algorithm switch
+    ❌ it does not, the autodetection somewhat works too!!!! - it changes the mismatch and improperly formatted lines though
+❌ tagged format
+❌ tagged and untagged formats
+❌ more checksum files + stdin
+❌ all GNU options like --ignore-missing or --quiet
+❌ proper error struct for check
+    ❌ count improperly formatted lines
+    ❌ count mismatch errors
+    ❌ count not readable errors
+    ❌ special case for one line
 
-// https://pkg.go.dev/github.com/spf13/pflag#Value
-func (a algorithm) String() string {
-	switch a {
-	case acrc:
-		return `crc`
-	case amd5:
-		return `md5`
-	case asha1:
-		return `sha1`
-	case asha224:
-		return `sha224`
-	case asha256:
-		return `sha256`
-	case asha384:
-		return `sha1384`
-	case asha512:
-		return `sha512`
-	default:
-		return `!unknown`
+*/
+
+func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger) error {
+	if c.check && c.algorithm == CRC {
+		return fmt.Errorf("--check is not supported with algorithm=%s", c.algorithm)
 	}
-}
 
-func (a algorithm) Type() string {
-	return "algorithm"
-}
+	// TODO: report number of incorrect lines and so
+	// TODO2: more lines
+	// TODO3: checksums from stdin?
+	if len(c.files) == 0 {
+		return fmt.Errorf("no files for --check")
+	}
+	f, err := os.Open(c.files[0])
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 
-func (a *algorithm) Set(value string) error {
-	switch value {
-	case `crc`:
-		*a = acrc
-	case `md5`:
-		*a = amd5
-	case `sha1`:
-		*a = asha1
-	case `sha224`:
-		*a = asha224
-	case `sha256`:
-		*a = asha256
-	case `sha384`:
-		*a = asha384
-	case `sha512`:
-		*a = asha512
-	default:
-		return fmt.Errorf("invalid argument %q for --algorithm", value)
+	var errs error
+	var ret uint8 = 0
+	r := bufio.NewScanner(f)
+	for r.Scan() {
+		line := r.Text()
+		err := c.checkLine(line, stdio.Stdout, debug)
+		if err != nil {
+			errs = multierror.Append(errs, err)
+			// TODO: proper error handling
+			fmt.Fprintf(stdio.Stderr, "DEV: %+v", err)
+			ret = 1
+		}
+	}
+	if ret != 0 {
+		return pipe.Error{Code: ret, Err: errs}
 	}
 	return nil
 }
@@ -217,6 +322,7 @@ var crctab = [256]uint32{0x00000000,
 	0x933eb0bb, 0x97ffad0c, 0xafb010b1, 0xab710d06, 0xa6322bdf,
 	0xa2f33668, 0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4,
 }
+var crcTable crc32.Table = crctab
 
 // https://git.suckless.org/sbase/file/cksum.c.html#l74
 func docrc(ctx context.Context, stdio pipe.Stdio) (string, int, error) {
@@ -249,6 +355,75 @@ func docrc(ctx context.Context, stdio pipe.Stdio) (string, int, error) {
 	return fmt.Sprintf("%d", ^ck), size, nil
 }
 
+func (a Algorithm) Size() int {
+	switch a {
+	case MD5:
+		return 32
+	case SHA1:
+		return 40
+	case SHA224:
+		return 56
+	case SHA256:
+		return 64
+	case SHA384:
+		return 96
+	case SHA512:
+		return 128
+	case BLAKE2B:
+		return 128
+	default:
+		return -1
+	}
+}
+
+func (a Algorithm) hash() (hash.Hash, string, bool) {
+	switch a {
+	case MD5:
+		return md5.New(), "MD5", true
+	case SHA1:
+		return sha1.New(), "SHA1", true
+	case SHA224:
+		return sha256.New224(), "SHA224", true
+	case SHA256:
+		return sha256.New(), "SHA256", true
+	case SHA384:
+		return sha512.New384(), "SHA338", true
+	case SHA512:
+		return sha512.New(), "SHA512", true
+	case BLAKE2B:
+		hash, err := blake2b.New(64, nil)
+		if err != nil {
+			return nil, "", false
+		}
+		return hash, "BLAKE2b", true
+	default:
+		return nil, "", false
+	}
+}
+
+func parseAlgorithm(s string) (Algorithm, error) {
+	var a Algorithm
+	switch strings.ToUpper(s) {
+	case "MD5":
+		a = MD5
+	case "SHA1":
+		a = SHA1
+	case "SHA224":
+		a = SHA224
+	case "SHA256":
+		a = SHA256
+	case "SHA384":
+		a = SHA384
+	case "SHA512":
+		a = SHA512
+	case "BLAKE2B":
+		a = BLAKE2B
+	default:
+		return NONE, fmt.Errorf("invalid argument %q for --algorithm", s)
+	}
+	return a, nil
+}
+
 // digest implements a digest for hash.Hash compatible stuff
 // md5, sha256
 func digest(hash hash.Hash, stdin io.Reader) (string, error) {
@@ -261,7 +436,7 @@ func digest(hash hash.Hash, stdin io.Reader) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func newDigestFunc(hash hash.Hash, hashName string) func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
+func newDigestFunc(hash hash.Hash, hashName string, untagged bool) func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
 	return func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
 		cksum, err := digest(hash, stdio.Stdin)
 		if err != nil {
@@ -270,7 +445,180 @@ func newDigestFunc(hash hash.Hash, hashName string) func(ctx context.Context, st
 		if name == "" {
 			name = "-"
 		}
-		fmt.Fprintf(stdio.Stdout, "%s (%s) = %s\n", hashName, name, cksum)
+		if untagged {
+			fmt.Fprintf(stdio.Stdout, "%s  %s\n", cksum, name)
+		} else {
+			fmt.Fprintf(stdio.Stdout, "%s (%s) = %s\n", hashName, name, cksum)
+		}
 		return nil
 	}
+}
+
+var (
+	tagged = regexp.MustCompile("[A-Z]")
+)
+
+type badLineFormatError string
+
+func badLineFormatErrorf(temp string, args ...any) error {
+	return badLineFormatError(fmt.Sprintf(temp, args...))
+}
+func (e badLineFormatError) Error() string {
+	return string(e)
+}
+
+type mismatchError struct {
+	Algorithm Algorithm
+	Name      string
+}
+
+func (e mismatchError) Error() string {
+	return fmt.Sprintf("{Algorithm: %q, Name: %q}", e.Algorithm, e.Name)
+}
+
+// parse untagged and tagged formats
+//  * untagged  hash name
+//  * tagged HASH(name) = hash
+// returns errors
+// 1. badLineFormatError for untagged format and algorithm NONE (unless autodetected)
+// 2. badLineFormatError for tagged format and a different hash
+// 3. badLineFormatError for wrong size of a hash
+// 4. mismatchError for mismatched has
+func (c CKSum) checkLine(line string, stdout io.Writer, debug *log.Logger) error {
+
+	if len(line) == 0 {
+		return badLineFormatError("empty")
+	}
+
+	if !tagged.MatchString(line[0:1]) {
+		debug.Printf("checkLine: detected --untagged format")
+		algorithms := make([]Algorithm, 0, 2)
+		if c.algorithm == NONE {
+
+			debug.Printf("checkLine: try to autodetect checksum")
+			expected, _, ok := strings.Cut(line, " ")
+			if !ok {
+				debug.Printf("checLine: no space in --untagged format")
+				goto cantDetect
+			}
+			switch len(expected) {
+			case MD5.Size():
+				c.algorithm = MD5
+			case SHA1.Size():
+				c.algorithm = SHA1
+			case SHA224.Size():
+				c.algorithm = SHA224
+			case SHA256.Size():
+				c.algorithm = SHA256
+			case SHA384.Size():
+				c.algorithm = SHA384
+			case SHA512.Size():
+				c.algorithm = SHA512 // or blake2b
+				algorithms = []Algorithm{SHA512, BLAKE2B}
+				debug.Printf("checLine: detected 512 bytes, trying SHA512 or BLAKE2b")
+			default:
+				goto cantDetect
+			}
+			goto detected
+
+		cantDetect:
+			return badLineFormatError("--algorithm must be specified with --untagged")
+		}
+
+	detected:
+		checkSum := func(algorithm Algorithm) error {
+			// untagged format is hash<space><space>name: check there are two spaces there
+			if line[algorithm.Size()] != ' ' || line[algorithm.Size()+1] != ' ' {
+				return badLineFormatError("--untagged must have two spaces between sum and file name")
+			}
+
+			hash, _, ok := algorithm.hash()
+			if !ok {
+				return fmt.Errorf("unsupported --algorithm %q", c.algorithm)
+			}
+
+			name := line[algorithm.Size()+2:]
+			err := checkSum(name, hash, line[:algorithm.Size()])
+			if err == nil {
+				fmt.Fprintf(stdout, "%s: OK", name)
+				return nil
+			}
+			if errors.Is(err, errMismatch) {
+				fmt.Fprintf(stdout, "%s: FAILED", name)
+				return mismatchError{Algorithm: algorithm, Name: name}
+			}
+			return err
+		}
+		if len(algorithms) == 0 {
+			return checkSum(c.algorithm)
+		}
+		err := checkSum(algorithms[0])
+		if err == nil {
+			return nil
+		}
+		err = checkSum(algorithms[1])
+		if err == nil {
+			return nil
+		}
+		return err
+	}
+
+	debug.Printf("checkLine: detected --tag format")
+	//TAG (file) = <hash>
+	tag, rest, ok := strings.Cut(line, " ")
+	if !ok {
+		return badLineFormatError("no space after digest tag")
+	}
+	algorithm, err := parseAlgorithm(tag)
+	if err != nil {
+		return badLineFormatErrorf("unsupported --algorithm tag %q", tag)
+	}
+
+	if len(rest) <= algorithm.Size() {
+		return badLineFormatErrorf("wrong size of hash: expected %d, got %d", algorithm.Size(), len(rest))
+	}
+	expected := rest[len(rest)-algorithm.Size():]
+
+	// rest is now (name) =
+	rest = rest[:len(rest)-algorithm.Size()]
+	// so check and remove all remaining bytes
+	lr := len(rest)
+	if lr <= 5 || rest[0] != '(' || rest[lr-4:] != ") = " {
+		return badLineFormatErrorf("missing `() = ` around file name")
+	}
+	name := rest[1 : lr-4]
+
+	hash, _, ok := c.algorithm.hash()
+	if !ok {
+		return fmt.Errorf("unsupported --algorithm %q", c.algorithm)
+	}
+	err = checkSum(name, hash, expected)
+	if err == nil {
+		fmt.Fprintf(stdout, "%s: OK", name)
+		return nil
+	}
+	if errors.Is(err, errMismatch) {
+		fmt.Fprintf(stdout, "%s: FAILED", name)
+		return mismatchError{Algorithm: algorithm, Name: name}
+	}
+	return err
+}
+
+var errMismatch = errors.New("checksum mismatch") // never returned upper
+
+func checkSum(name string, hash hash.Hash, expected string) error {
+	f, err := os.Open(name)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	checkSum, err := digest(hash, f)
+	if err != nil {
+		return err
+	}
+
+	if expected == checkSum {
+		return nil
+	}
+	return errMismatch
 }
