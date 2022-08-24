@@ -681,7 +681,7 @@ func (c CKSum) checkLine(line string, debug *log.Logger) (checkResult, error) {
 		return zero, badLineFormatErrorf("unsupported --algorithm tag %q", tag)
 	}
 
-	if c.algorithm != NONE && strings.ToUpper(c.algorithm.String()) != strings.ToUpper(tag) {
+	if c.algorithm != NONE && !strings.EqualFold(c.algorithm.String(), tag) {
 		return zero, badLineFormatErrorf("line tag %q does not match --algorithm %q", tag, c.algorithm.String())
 	}
 
