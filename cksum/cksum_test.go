@@ -87,27 +87,28 @@ func initTemp(t *testing.T, name string) string {
 	err = dest.Sync()
 	require.NoError(t, err)
 
-	md5, err := os.Create(name + ".notag.md5")
-	require.NoError(t, err)
-	defer md5.Close()
-	fmt.Fprintf(md5, "%s  %s\n", "5f707e2a346cc0dac73e1323198a503c", name)
-	err = md5.Sync()
-	require.NoError(t, err)
-
-	md5t, err := os.Create(name + ".tag.md5")
-	require.NoError(t, err)
-	defer md5.Close()
-	fmt.Fprintf(md5t, "MD5 (%s) = %s\n", name, "5f707e2a346cc0dac73e1323198a503c")
-	err = md5t.Sync()
-	require.NoError(t, err)
+	spongef(t, name+".notag.md5", "%s  %s\n", "5f707e2a346cc0dac73e1323198a503c", name)
+	spongef(t, name+".tag.md5", "MD5 (%s) = %s\n", name, "5f707e2a346cc0dac73e1323198a503c")
+	spongef(t, name+".notag.broken.md5", "%s  %s\n", "1f707e2a346cc0dac73e1323198a503c", name)
+	spongef(t, name+".tag.broken.md5", "MD5 (%s) = %s\n", name, "1f707e2a346cc0dac73e1323198a503c")
 
 	return temp
+}
+
+func spongef(t *testing.T, name string, format string, a ...any) {
+	f, err := os.Create(name)
+	require.NoError(t, err)
+	defer f.Close()
+	_, err = fmt.Fprintf(f, format, a...)
+	require.NoError(t, err)
+	err = f.Sync()
+	require.NoError(t, err)
 }
 
 func TestCheckCRC(t *testing.T) {
 	test.Parallel(t)
 	cksum := New().Check(true).Algorithm(CRC)
-	err := cksum.Run(context.Background(), pipe.Stdio{})
+	err := cksum.Run(context.Background(), pipe.EmptyStdio)
 	require.Error(t, err)
 	require.EqualError(t, err, "--check is not supported with algorithm=crc")
 }
@@ -156,12 +157,141 @@ func TestCheck(t *testing.T) {
 			}
 
 			err := tt.cksum.Run(context.Background(), stdio)
-			t.Logf("err=%q", stderr.String())
+			t.Logf("stderr=%q", stderr.String())
+			t.Logf("stdout=%q", stdout.String())
 			require.NoError(t, err)
-
-			t.Logf("out=%q", stdout.String())
-
 		})
 	}
 
+	// test errors
+	errCases := []struct {
+		name           string
+		cksum          *CKSum
+		expectedError  string
+		expectedStdout string
+	}{
+		{
+			name:          "error --algorithm mismatch",
+			cksum:         New().Check(true).Algorithm(SHA224).Files(tsp + ".tag.md5"),
+			expectedError: "BadLineFormatError",
+		},
+		{
+			name:          "error not found file",
+			cksum:         New().Check(true).Algorithm(SHA224).Files(tsp + ".notfound.md5"),
+			expectedError: "notfound.md5: no such file or directory",
+		},
+		{
+			name:           "error mismatch tagged --algorithm NONE",
+			cksum:          New().Check(true).Algorithm(NONE).Files(tsp + ".tag.broken.md5"),
+			expectedStdout: "three-small-pigs: FAILED\n",
+		},
+		{
+			name:           "error mismatch tagged --algorithm MD5",
+			cksum:          New().Check(true).Algorithm(MD5).Files(tsp + ".tag.broken.md5"),
+			expectedStdout: "three-small-pigs: FAILED\n",
+		},
+		{
+			name:           "error mismatch untagged --algorithm NONE",
+			cksum:          New().Check(true).Algorithm(NONE).Files(tsp + ".notag.broken.md5"),
+			expectedStdout: "three-small-pigs: FAILED\n",
+		},
+		{
+			name:           "error mismatch untagged --algorithm MD5",
+			cksum:          New().Check(true).Algorithm(MD5).Files(tsp + ".notag.broken.md5"),
+			expectedStdout: "three-small-pigs: FAILED\n",
+		},
+	}
+
+	for _, tt := range errCases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			test.Parallel(t)
+			tt.cksum.SetDebug(testing.Verbose())
+
+			var stdout strings.Builder
+			var stderr strings.Builder
+			stdio := pipe.Stdio{
+				Stdin:  nil,
+				Stdout: &stdout,
+				Stderr: &stderr,
+			}
+
+			err := tt.cksum.Run(context.Background(), stdio)
+			require.Error(t, err)
+
+			if tt.expectedError != "" {
+				require.True(t, strings.Contains(err.Error(), tt.expectedError))
+			} else if tt.expectedStdout != "" {
+				require.Equal(t, tt.expectedStdout, stdout.String())
+			} else {
+				t.Fatalf("test case %q does not check error neither stdout", tt.name)
+			}
+		})
+	}
+
+}
+
+func TestFromArgs(t *testing.T) {
+	test.Parallel(t)
+	testCases := []struct {
+		name     string
+		args     []string
+		expected *CKSum
+	}{
+		{
+			"default",
+			nil,
+			New(),
+		},
+		{
+			"--check",
+			[]string{"--check"},
+			New().Check(true),
+		},
+		{
+			"--tag",
+			[]string{"--tag"},
+			New(),
+		},
+		{
+			"--algorithm crc",
+			[]string{"--algorithm", "crc"},
+			New().Algorithm(CRC).Untagged(true),
+		},
+		{
+			"--algorithm sha1",
+			[]string{"--algorithm", "sha1"},
+			New().Algorithm(SHA1),
+		},
+		{
+			"--algorithm blake2b --untagged",
+			[]string{"--algorithm", "blake2b", "--untagged"},
+			New().Algorithm(BLAKE2B).Untagged(true),
+		},
+		{
+			"--ignore-missing",
+			[]string{"--ignore-missing"},
+			New().IgnoreMissing(true),
+		},
+		{
+			"--quiet",
+			[]string{"--quiet"},
+			New().Quiet(true),
+		},
+		{
+			"--status",
+			[]string{"--status"},
+			New().Status(true),
+		},
+	}
+
+	for _, tt := range testCases {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			test.Parallel(t)
+			cksum, err := New().FromArgs(tt.args)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, cksum)
+		})
+	}
 }

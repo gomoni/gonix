@@ -19,4 +19,5 @@
  * Add sort --version-sort
  * Add (a basic) grep
  * Add wrapper for goawk
+ * https://github.com/itchyny/gojq
  * check if we can transform things from u-root

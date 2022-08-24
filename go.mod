@@ -10,6 +10,7 @@ require (
 	github.com/stretchr/testify v1.7.1
 	go.uber.org/goleak v1.1.12
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/sync v0.0.0-20220819030929-7fc1605a5dde
 )
 
 require (
