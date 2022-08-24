@@ -86,7 +86,7 @@ syntax into equivalent Go code. Code can
 
 ## Busybox-like command line tool
 
-Can be built and run like busybox or a toybox.
+Can be built and executed like busybox or a toybox.
 
 ```sh
 ./gonix cat /etc/passwd /etc/resolv.conf | md5sum
@@ -95,7 +95,7 @@ Can be built and run like busybox or a toybox.
 # Builtins
 
  * cat -uses [goawk](https://github.com/benhoyt/goawk)
- * cksum - POSIX ctx, md5 and sha checksums
+ * cksum - POSIX ctx, md5 and sha check sums, runs concurrently by default
  * wc - word count
  * head -n/--lines - uses [goawk](https://github.com/gomoni/gonix/blob/main/head/head_negative.awk)
  

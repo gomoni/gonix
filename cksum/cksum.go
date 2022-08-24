@@ -5,6 +5,36 @@
 // Contains portions of cksum.c from suckless sbase under MIT license
 // https://git.suckless.org/sbase/file/LICENSE.html
 
+/*
+check is surprisingly complex problem
+
+what is implemented
+✅ check don't work with crc
+✅ check works with recent hashes like md5 or sha
+✅ untagged format
+✅ untagged format requires explicit --algorithm switch
+✅ tagged format - happy path
+✅ --check --algorithm returns no properly formatted lines error for a different hash
+🚀 autodetect hash for untagged format - this include sha512 and blake2b
+🚀 parallel check or checksums from one file limited by -j/--threds, defaults to GOMAXPROC
+❌ parallel generation of checksums
+
+
+what is not (yet)
+❌ GNU options:
+    -l/--length
+    -z/--zero
+    --strict    - cksum will return 1 by default
+    -w/--warn
+    --debug
+❌ everything around warns and counting various errors - this looks to be random at least
+    ❌ count improperly formatted lines
+    ❌ count mismatch errors
+    ❌ count not readable errors
+    ❌ special case for one line
+
+*/
+
 package cksum
 
 import (
@@ -22,6 +52,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/gomoni/gonix/internal"
@@ -101,20 +132,28 @@ func (a *Algorithm) Set(value string) error {
 }
 
 type CKSum struct {
-	debug     bool
-	algorithm Algorithm
-	check     bool
-	untagged  bool
-	files     []string
+	threads       uint
+	debug         bool
+	algorithm     Algorithm
+	check         bool
+	untagged      bool
+	ignoreMissing bool
+	quiet         bool
+	status        bool
+	files         []string
 }
 
 func New() *CKSum {
 	return &CKSum{
-		debug:     false,
-		algorithm: NONE,
-		check:     false,
-		untagged:  false,
-		files:     []string{},
+		threads:       0,
+		debug:         false,
+		algorithm:     NONE,
+		check:         false,
+		untagged:      false,
+		ignoreMissing: false,
+		quiet:         false,
+		status:        false,
+		files:         []string{},
 	}
 }
 
@@ -134,11 +173,30 @@ func (c *CKSum) Check(check bool) *CKSum {
 	return c
 }
 
+func (c *CKSum) IgnoreMissing(ignoreMissing bool) *CKSum {
+	c.ignoreMissing = ignoreMissing
+	return c
+}
+
+func (c *CKSum) Parallel(limit uint) *CKSum {
+	c.threads = limit
+	return c
+}
+
+func (c *CKSum) Quiet(quiet bool) *CKSum {
+	c.quiet = quiet
+	return c
+}
+
 func (c *CKSum) Untagged(untagged bool) *CKSum {
 	c.untagged = untagged
 	return c
 }
 
+func (c *CKSum) Status(status bool) *CKSum {
+	c.status = status
+	return c
+}
 func (c *CKSum) SetDebug(debug bool) *CKSum {
 	c.debug = debug
 	return c
@@ -146,11 +204,18 @@ func (c *CKSum) SetDebug(debug bool) *CKSum {
 
 func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	flag := pflag.FlagSet{}
-	var algorithm Algorithm = CRC
+	var algorithm Algorithm = NONE
 	flag.VarP(&algorithm, "algorithm", "a", "checksum algorithm to use, crc is default")
-	c.check = *flag.BoolP("check", "c", false, "check checksums from file")
-	_ = *flag.Bool("tag", true, "create BSD style checksum (default)")
-	untagged := *flag.Bool("untagged", false, "create checksum without digest type")
+	check := flag.BoolP("check", "c", false, "check checksums from file(s)")
+	_ = flag.Bool("tag", true, "create BSD style checksum (default)")
+	untagged := flag.Bool("untagged", false, "create checksum without digest type")
+	ignoreMissing := flag.Bool("ignore-missing", false, "ignore missing files")
+	quiet := flag.Bool("quiet", false, "do not print OK for every verified file")
+	status := flag.Bool("status", false, "report status code only")
+	// GNU is not consistent with parallel naming (make uses -j/--jobs, xargs -P and so
+	// used -j/--threads as ripgrep does
+	var threads uint
+	flag.UintVarP(&threads, "threads", "j", 0, "generate or check using N goroutines, 0 equals GOMAXPROCS")
 	err := flag.Parse(argv)
 	if err != nil {
 		return nil, pipe.NewErrorf(1, "cksum: parsing failed: %w", err)
@@ -158,18 +223,23 @@ func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	c.files = flag.Args()
 
 	c.algorithm = algorithm
-	if c.algorithm == NONE && !c.check {
-		c.algorithm = CRC
-	}
-
-	if c.algorithm == CRC || untagged {
+	if c.algorithm == CRC || *untagged {
 		c.untagged = true
 	}
+	c.check = *check
+	c.ignoreMissing = *ignoreMissing
+	c.quiet = *quiet
+	c.status = *status
+	c.threads = threads
 	return c, nil
 }
 
 func (c CKSum) Run(ctx context.Context, stdio pipe.Stdio) error {
 	debug := dbg.Logger(c.debug, "cksum", stdio.Stderr)
+	if c.threads == 0 {
+		c.threads = uint(runtime.GOMAXPROCS(0))
+	}
+	debug.Printf("running with --threads %d", c.threads)
 
 	if c.check {
 		debug.Printf("about to call c.checkSum")
@@ -212,59 +282,72 @@ func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) err
 	return runFiles.Do(ctx)
 }
 
-/*
-check is surprisingly complex problem
-
-✅ check don't work with crc
-✅ untagged format
-✅ untagged format requires explicit --algorithm switch
-    ❌ it does not, the autodetection somewhat works too!!!! - it changes the mismatch and improperly formatted lines though
-❌ tagged format
-❌ tagged and untagged formats
-❌ more checksum files + stdin
-❌ all GNU options like --ignore-missing or --quiet
-❌ proper error struct for check
-    ❌ count improperly formatted lines
-    ❌ count mismatch errors
-    ❌ count not readable errors
-    ❌ special case for one line
-
-*/
-
 func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger) error {
 	if c.check && c.algorithm == CRC {
 		return fmt.Errorf("--check is not supported with algorithm=%s", c.algorithm)
 	}
 
-	// TODO: report number of incorrect lines and so
-	// TODO2: more lines
-	// TODO3: checksums from stdin?
-	if len(c.files) == 0 {
-		return fmt.Errorf("no files for --check")
+	ckSumOne := func(_ context.Context, line string) (checkResult, error) {
+		return c.checkLine(line, debug)
 	}
-	f, err := os.Open(c.files[0])
-	if err != nil {
-		return err
-	}
-	defer f.Close()
 
-	var errs error
-	var ret uint8 = 0
-	r := bufio.NewScanner(f)
-	for r.Scan() {
-		line := r.Text()
-		err := c.checkLine(line, stdio.Stdout, debug)
-		if err != nil {
-			errs = multierror.Append(errs, err)
-			// TODO: proper error handling
-			fmt.Fprintf(stdio.Stderr, "DEV: %+v", err)
-			ret = 1
+	ckSum := func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
+		r := bufio.NewScanner(stdio.Stdin)
+		input := make([]string, 0, 16)
+		for r.Scan() {
+			if r.Err() != nil {
+				return pipe.Error{Code: 1, Err: r.Err()}
+			}
+			input = append(input, r.Text())
 		}
+
+		results, err := internal.PMap(ctx, c.threads, input, ckSumOne)
+		var ret uint8 = 0
+		var retErr error
+		if err != nil {
+			ret = 1
+			retErr = multierror.Append(retErr, err)
+		}
+
+		// TODO: checksum failed is not an error
+		for _, result := range results {
+			switch result.state {
+			case stNONE:
+				continue
+			case stOK:
+				if !c.quiet || !c.status {
+					fmt.Fprintf(stdio.Stdout, "%s: OK\n", result.name)
+				}
+			case stFAILED:
+				if !c.status {
+					fmt.Fprintf(stdio.Stdout, "%s: FAILED\n", result.name)
+					ret = 1
+				}
+			case stIO:
+				if c.ignoreMissing {
+					continue
+				}
+				if !c.status {
+					fmt.Fprintf(stdio.Stdout, "%s: FAILED open or read error\n", result.name)
+					ret = 1
+				}
+			default:
+				panic("unknown result state")
+			}
+		}
+
+		if ret != 0 {
+			return pipe.NewError(ret, err)
+		}
+		return nil
 	}
-	if ret != 0 {
-		return pipe.Error{Code: ret, Err: errs}
-	}
-	return nil
+
+	runFiles := internal.NewRunFiles(
+		c.files,
+		stdio,
+		ckSum,
+	)
+	return runFiles.Do(ctx)
 }
 
 // copy from https://git.suckless.org/sbase/file/cksum.c.html#l11
@@ -456,36 +539,54 @@ var (
 	tagged = regexp.MustCompile("[A-Z]")
 )
 
-type badLineFormatError string
+type BadLineFormatError string
 
 func badLineFormatErrorf(temp string, args ...any) error {
-	return badLineFormatError(fmt.Sprintf(temp, args...))
+	return BadLineFormatError(fmt.Sprintf(temp, args...))
 }
-func (e badLineFormatError) Error() string {
-	return string(e)
-}
-
-type mismatchError struct {
-	Algorithm Algorithm
-	Name      string
+func (e BadLineFormatError) Error() string {
+	return fmt.Sprintf("BadLineFormatError(%q)", string(e))
 }
 
-func (e mismatchError) Error() string {
-	return fmt.Sprintf("{Algorithm: %q, Name: %q}", e.Algorithm, e.Name)
+type checkState int
+
+const (
+	stNONE   checkState = 0
+	stOK     checkState = 1
+	stFAILED checkState = 2
+	stIO     checkState = 3
+)
+
+type checkResult struct {
+	name  string
+	state checkState
+}
+
+func stateOK(name string) checkResult {
+	return checkResult{name: name, state: stOK}
+}
+
+func stateFAILED(name string) checkResult {
+	return checkResult{name: name, state: stFAILED}
+}
+
+func stateIO(name string) checkResult {
+	return checkResult{name: name, state: stIO}
 }
 
 // parse untagged and tagged formats
 //  * untagged  hash name
 //  * tagged HASH(name) = hash
 // returns errors
-// 1. badLineFormatError for untagged format and algorithm NONE (unless autodetected)
-// 2. badLineFormatError for tagged format and a different hash
-// 3. badLineFormatError for wrong size of a hash
-// 4. mismatchError for mismatched has
-func (c CKSum) checkLine(line string, stdout io.Writer, debug *log.Logger) error {
+// 1. BadLineFormatError for untagged format and algorithm NONE (unless autodetected)
+// 2. BadLineFormatError for tagged format and a different hash
+// 3. BadLineFormatError for wrong size of a hash
+// 4. MismatchError for mismatched hash
+func (c CKSum) checkLine(line string, debug *log.Logger) (checkResult, error) {
+	var zero checkResult
 
 	if len(line) == 0 {
-		return badLineFormatError("empty")
+		return zero, BadLineFormatError("empty")
 	}
 
 	if !tagged.MatchString(line[0:1]) {
@@ -520,60 +621,72 @@ func (c CKSum) checkLine(line string, stdout io.Writer, debug *log.Logger) error
 			goto detected
 
 		cantDetect:
-			return badLineFormatError("--algorithm must be specified with --untagged")
+			return zero, BadLineFormatError("--algorithm must be specified with --untagged")
 		}
 
 	detected:
-		checkSum := func(algorithm Algorithm) error {
+		checkSum := func(algorithm Algorithm) (checkResult, error) {
 			// untagged format is hash<space><space>name: check there are two spaces there
 			if line[algorithm.Size()] != ' ' || line[algorithm.Size()+1] != ' ' {
-				return badLineFormatError("--untagged must have two spaces between sum and file name")
+				return zero, BadLineFormatError("--untagged must have two spaces between sum and file name")
 			}
 
 			hash, _, ok := algorithm.hash()
 			if !ok {
-				return fmt.Errorf("unsupported --algorithm %q", c.algorithm)
+				return zero, fmt.Errorf("unsupported --algorithm %q", c.algorithm)
 			}
 
 			name := line[algorithm.Size()+2:]
 			err := checkSum(name, hash, line[:algorithm.Size()])
 			if err == nil {
-				fmt.Fprintf(stdout, "%s: OK", name)
-				return nil
+				/*if !c.quiet || !c.status {
+					fmt.Fprintf(stdout, "%s: OK\n", name)
+				}*/
+				return stateOK(name), nil
 			}
 			if errors.Is(err, errMismatch) {
-				fmt.Fprintf(stdout, "%s: FAILED", name)
-				return mismatchError{Algorithm: algorithm, Name: name}
+				/*if !c.status {
+					fmt.Fprintf(stdout, "%s: FAILED\n", name)
+				}
+				*/
+				return stateFAILED(name), nil
 			}
-			return err
+			return stateIO(name), nil
 		}
 		if len(algorithms) == 0 {
 			return checkSum(c.algorithm)
 		}
-		err := checkSum(algorithms[0])
+		res, err := checkSum(algorithms[0])
 		if err == nil {
-			return nil
+			return res, nil
 		}
-		err = checkSum(algorithms[1])
-		if err == nil {
-			return nil
+		var blferr BadLineFormatError
+		if errors.As(err, &blferr) {
+			res, err = checkSum(algorithms[1])
+			if err == nil {
+				return res, nil
+			}
 		}
-		return err
+		return res, err
 	}
 
 	debug.Printf("checkLine: detected --tag format")
 	//TAG (file) = <hash>
 	tag, rest, ok := strings.Cut(line, " ")
 	if !ok {
-		return badLineFormatError("no space after digest tag")
+		return zero, BadLineFormatError("no space after digest tag")
 	}
 	algorithm, err := parseAlgorithm(tag)
 	if err != nil {
-		return badLineFormatErrorf("unsupported --algorithm tag %q", tag)
+		return zero, badLineFormatErrorf("unsupported --algorithm tag %q", tag)
+	}
+
+	if c.algorithm != NONE && strings.ToUpper(c.algorithm.String()) != strings.ToUpper(tag) {
+		return zero, badLineFormatErrorf("line tag %q does not match --algorithm %q", tag, c.algorithm.String())
 	}
 
 	if len(rest) <= algorithm.Size() {
-		return badLineFormatErrorf("wrong size of hash: expected %d, got %d", algorithm.Size(), len(rest))
+		return zero, badLineFormatErrorf("wrong size of hash: expected %d, got %d", algorithm.Size(), len(rest))
 	}
 	expected := rest[len(rest)-algorithm.Size():]
 
@@ -582,24 +695,31 @@ func (c CKSum) checkLine(line string, stdout io.Writer, debug *log.Logger) error
 	// so check and remove all remaining bytes
 	lr := len(rest)
 	if lr <= 5 || rest[0] != '(' || rest[lr-4:] != ") = " {
-		return badLineFormatErrorf("missing `() = ` around file name")
+		return zero, badLineFormatErrorf("missing `() = ` around file name")
 	}
 	name := rest[1 : lr-4]
 
-	hash, _, ok := c.algorithm.hash()
+	hash, _, ok := algorithm.hash()
 	if !ok {
-		return fmt.Errorf("unsupported --algorithm %q", c.algorithm)
+		return zero, fmt.Errorf("unsupported --algorithm %q", c.algorithm)
 	}
 	err = checkSum(name, hash, expected)
 	if err == nil {
-		fmt.Fprintf(stdout, "%s: OK", name)
-		return nil
+		/*if !c.quiet || !c.status {
+			fmt.Fprintf(stdout, "%s: OK\n", name)
+		}*/
+		return stateOK(name), nil
 	}
 	if errors.Is(err, errMismatch) {
-		fmt.Fprintf(stdout, "%s: FAILED", name)
-		return mismatchError{Algorithm: algorithm, Name: name}
+		/*if !c.status {
+			fmt.Fprintf(stdout, "%s: FAILED\n", name)
+		}*/
+		return stateFAILED(name), nil
 	}
-	return err
+	if err != nil {
+		return stateIO(name), err
+	}
+	panic("checkLine: tagged: should never go there")
 }
 
 var errMismatch = errors.New("checksum mismatch") // never returned upper
