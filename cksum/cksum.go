@@ -337,7 +337,7 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 		}
 
 		if ret != 0 {
-			return pipe.NewError(ret, err)
+			return pipe.NewError(ret, retErr)
 		}
 		return nil
 	}
