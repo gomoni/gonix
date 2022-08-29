@@ -44,7 +44,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash/crc32"
 	"io"
 	"log"
 	"os"
@@ -414,8 +413,6 @@ func docrc(_ context.Context, hashFunc func() simpleHash, stdin io.Reader) (stri
 	}
 	return string(hash.Sum(nil)), n, nil
 }
-
-var crctable crc32.Table = crctab
 
 type crc struct {
 	ck   uint32
