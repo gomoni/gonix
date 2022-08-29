@@ -10,12 +10,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/gomoni/gonix/pipe"
-	"github.com/hashicorp/go-multierror"
 
 	"github.com/benhoyt/goawk/parser"
 	"github.com/spf13/pflag"
@@ -159,39 +157,16 @@ func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 		return ErrNothingToDo
 	}
 
-	files := c.files
-	if len(files) == 0 {
-		files = []string{""}
-	}
-
-	var errs error
-	for _, f := range files {
-		var in io.ReadCloser
-		if f == "" || f == "-" {
-			in = stdio.Stdin
-		} else {
-			f, err := os.Open(f)
-			if err != nil {
-				fmt.Fprintf(stdio.Stderr, "%s\n", err)
-				errs = multierror.Append(errs, err)
-				continue
-			}
-			defer f.Close()
-			in = f
-		}
-		err := pipe.Run(ctx, pipe.Stdio{
-			Stdin:  in,
-			Stdout: stdio.Stdout,
-			Stderr: stdio.Stderr}, filters...)
+	cat := func(ctx context.Context, stdio pipe.Stdio, _ int, _ string) error {
+		err := pipe.Run(ctx, stdio, filters...)
 		if err != nil {
 			return pipe.NewError(1, fmt.Errorf("cat: fail to run: %w", err))
 		}
+		return nil
+	}
 
-	}
-	if errs != nil {
-		return pipe.NewError(1, errs)
-	}
-	return nil
+	runFiles := internal.NewRunFiles(c.files, stdio, cat)
+	return runFiles.Do(ctx)
 }
 
 func (c Cat) awk(debug *log.Logger) ([]*parser.Program, error) {

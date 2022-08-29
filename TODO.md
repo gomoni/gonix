@@ -1,8 +1,8 @@
 # TODO
+
+ * Stdin and Stdout are closed even if passed as io.Reader/io.Writer
  
 >       >128    A command was interrupted by a signal.
-
- * do one need to use ReadCloser for Stdio?
 
  * TODO: should we pass environ to builtins too?
         idea `FromArgs(env Environ, args ...string)` ???
@@ -14,13 +14,14 @@
 
  * implement and a shell scripting builtins like until?
 
+
  * Add (a basic) tr
  * Add (a basic) tail
  * Add sort --version-sort
  * Add (a basic) grep
  * Add wrapper for goawk
  * https://github.com/itchyny/gojq
- * check if we can transform things from u-root
+ * wc can run in a parallel
 
 ## sbase tools
 

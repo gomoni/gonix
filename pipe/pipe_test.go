@@ -2,6 +2,7 @@ package pipe
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -95,4 +96,37 @@ type errFilter struct {
 
 func (f errFilter) Run(_ context.Context, stdio Stdio) error {
 	return f.err
+}
+
+type mockCloser struct {
+	closeErr error
+}
+
+func (m mockCloser) Close() error {
+	return m.closeErr
+}
+func (mockCloser) Read(_ []byte) (int, error) {
+	panic("not implemented")
+}
+func (mockCloser) Write(_ []byte) (int, error) {
+	panic("not implemented")
+}
+
+func TestAllwaysCloser(t *testing.T) {
+	t.Parallel()
+
+	m := mockCloser{closeErr: errors.New("Close() called")}
+
+	var r io.Reader = m
+	err := closeReader(r)
+	require.Error(t, err)
+	require.EqualError(t, err, "Close() called")
+
+	var w io.Writer = m
+	err = closeWriter(w)
+	require.Error(t, err)
+	require.EqualError(t, err, "Close() called")
+
+	err = closeReader(io.NopCloser(r))
+	require.NoError(t, err)
 }

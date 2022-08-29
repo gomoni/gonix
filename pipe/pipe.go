@@ -31,14 +31,14 @@ import (
 
 // EmptyStdio is a good default which does not read neither prints anything from/to stdin/stdout/stderr
 var EmptyStdio = Stdio{
-	io.NopCloser(zeroReader{}),
+	zeroReader{},
 	io.Discard,
 	io.Discard,
 }
 
 // Stdio describes standard io streams for commands
 type Stdio struct {
-	Stdin  io.ReadCloser // TODO: is this needed?
+	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
 }
@@ -113,10 +113,10 @@ func (p Pipe) Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
 		}
 		wg.Add(1)
 		isLast := idx == len(cmds)-1
-		go func(cancel context.CancelFunc, noPipeFail bool, cmd Filter, errChan chan<- error, stdin io.ReadCloser, stdout io.WriteCloser) {
+		go func(cancel context.CancelFunc, noPipeFail bool, cmd Filter, errChan chan<- error, stdin io.Reader, stdout io.WriteCloser) {
 			defer wg.Done()
-			defer stdin.Close()
-			defer stdout.Close()
+			defer closeReader(stdin)
+			defer closeWriter(stdout)
 
 			// XXX TODO FIXME: his it possible for go to deal with a failed predecessor?
 			// use atomics?
@@ -207,4 +207,22 @@ type zeroReader struct{}
 
 func (zeroReader) Read([]byte) (int, error) {
 	return 0, io.EOF
+}
+
+// closeWriter if io.Writer happens to implement io.Closer interface
+func closeWriter(w io.Writer) error {
+	wc, ok := w.(io.Closer)
+	if ok {
+		return wc.Close()
+	}
+	return nil
+}
+
+// closeReader if io.Reader happens to implement io.Closer interface
+func closeReader(r io.Reader) error {
+	rc, ok := r.(io.Closer)
+	if ok {
+		return rc.Close()
+	}
+	return nil
 }

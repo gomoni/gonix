@@ -11,16 +11,15 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"unicode/utf8"
 
+	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/gomoni/gonix/pipe"
-	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/pflag"
 )
 
@@ -122,31 +121,19 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 	stat := make([]stats, 0, len(c.files))
 	total := stats{fileName: "total"}
 
-	var errs error
-	for _, f := range files {
-		var in io.ReadCloser
-		if f == "" || f == "-" {
-			in = stdio.Stdin
-		} else {
-			f, err := os.Open(f)
-			if err != nil {
-				fmt.Fprintf(stdio.Stderr, "%s\n", err)
-				errs = multierror.Append(errs, err)
-				continue
-			}
-			defer f.Close()
-			in = f
-		}
-		st, err := c.runFile(ctx, in, debug)
+	wc := func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
+		st, err := c.runFile(ctx, stdio.Stdin, debug)
 		if err != nil {
-			fmt.Fprintf(stdio.Stderr, "%s\n", err)
-			errs = multierror.Append(errs, err)
-			continue
+			return pipe.NewError(1, fmt.Errorf("wc: fail to run: %w", err))
 		}
-		st.fileName = f
+		st.fileName = name
 		total.add(st)
 		stat = append(stat, st)
+		return nil
 	}
+
+	runFiles := internal.NewRunFiles(c.files, stdio, wc)
+	errs := runFiles.Do(ctx)
 
 	percents, argsFn := c.percentsArgsFn()
 	stdinOnly := len(files) == 1 && files[0] == ""
@@ -174,6 +161,9 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 		err := w.Flush()
 		if err != nil {
 			return pipe.NewErrorf(1, "wc: pipe flush: %w", err)
+		}
+		if errs != nil {
+			return pipe.NewError(1, errs)
 		}
 		return nil
 	}
