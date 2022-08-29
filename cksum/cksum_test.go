@@ -72,7 +72,7 @@ func (tt testCase) Expected() string {
 
 func initTemp(t *testing.T, name string) string {
 	t.Helper()
-	temp, err := os.MkdirTemp("", "cksum-check*")
+	temp, err := os.MkdirTemp("", "gonix-cksum-check*")
 	require.NoError(t, err)
 	err = os.Chdir(temp)
 	require.NoError(t, err)
@@ -89,6 +89,7 @@ func initTemp(t *testing.T, name string) string {
 
 	spongef(t, name+".notag.md5", "%s  %s\n", "5f707e2a346cc0dac73e1323198a503c", name)
 	spongef(t, name+".tag.md5", "MD5 (%s) = %s\n", name, "5f707e2a346cc0dac73e1323198a503c")
+	spongef(t, name+".missing.file.tag.md5", "MD5 (%s) = %s\nMD5 (missing-file) = %s\n", name, "5f707e2a346cc0dac73e1323198a503c", "5f707e2a346cc0dac73e1323198a503c")
 	spongef(t, name+".notag.broken.md5", "%s  %s\n", "1f707e2a346cc0dac73e1323198a503c", name)
 	spongef(t, name+".tag.broken.md5", "MD5 (%s) = %s\n", name, "1f707e2a346cc0dac73e1323198a503c")
 
@@ -125,22 +126,41 @@ func TestCheck(t *testing.T) {
 	})
 
 	testCases := []struct {
-		name  string
-		cksum *CKSum
+		name           string
+		cksum          *CKSum
+		expectedStdout string
 	}{
 		{
-			name:  "md5 untagged",
-			cksum: New().Check(true).Algorithm(MD5).Files(tsp + ".notag.md5"),
+			name:           "md5 untagged",
+			cksum:          New().Check(true).Algorithm(MD5).Files(tsp + ".notag.md5"),
+			expectedStdout: "three-small-pigs: OK\n",
 		},
 		{
-			name:  "md5 untagged autodetect",
-			cksum: New().SetDebug(testing.Verbose()).Check(true).Files(tsp + ".notag.md5"),
+			name:           "md5 untagged autodetect",
+			cksum:          New().SetDebug(testing.Verbose()).Check(true).Files(tsp + ".notag.md5"),
+			expectedStdout: "three-small-pigs: OK\n",
+		},
+		{
+			name:           "md5 tagged",
+			cksum:          New().SetDebug(testing.Verbose()).Check(true).Untagged(false).Algorithm(MD5).Files(tsp + ".tag.md5"),
+			expectedStdout: "three-small-pigs: OK\n",
+		},
+		{
+			name:           "md5 ignore missing",
+			cksum:          New().SetDebug(testing.Verbose()).Check(true).IgnoreMissing(true).Algorithm(MD5).Files(tsp + ".missing.file.tag.md5"),
+			expectedStdout: "three-small-pigs: OK\n",
+		},
+		{
+			name:           "md5 quiet",
+			cksum:          New().SetDebug(testing.Verbose()).Check(true).Quiet(true).Algorithm(MD5).Files(tsp + ".tag.md5"),
+			expectedStdout: "",
+		},
+		{
+			name:           "md5 status",
+			cksum:          New().SetDebug(testing.Verbose()).Check(true).Status(true).Algorithm(MD5).Files(tsp + ".tag.md5"),
+			expectedStdout: "",
 		},
 		// TODO: sha512 and blake2b autodetect
-		{
-			name:  "md5 tagged",
-			cksum: New().SetDebug(testing.Verbose()).Check(true).Untagged(false).Algorithm(MD5).Files(tsp + ".tag.md5"),
-		},
 	}
 
 	for _, tt := range testCases {
@@ -160,6 +180,8 @@ func TestCheck(t *testing.T) {
 			t.Logf("stderr=%q", stderr.String())
 			t.Logf("stdout=%q", stdout.String())
 			require.NoError(t, err)
+
+			require.Equal(t, tt.expectedStdout, stdout.String())
 		})
 	}
 

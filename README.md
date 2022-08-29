@@ -95,7 +95,7 @@ Can be built and executed like busybox or a toybox.
 # Builtins
 
  * cat -uses [goawk](https://github.com/benhoyt/goawk)
- * cksum - POSIX ctx, md5 and sha check sums, runs concurrently by default
+ * cksum - POSIX ctx, md5 and sha check sums, runs concurrently (`-j/--threads`) by default
  * wc - word count
  * head -n/--lines - uses [goawk](https://github.com/gomoni/gonix/blob/main/head/head_negative.awk)
  
