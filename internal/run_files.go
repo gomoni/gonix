@@ -1,10 +1,12 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/gomoni/gonix/pipe"
 	"github.com/hashicorp/go-multierror"
@@ -31,10 +33,10 @@ func NewRunFiles(files []string, stdio pipe.Stdio, fun func(context.Context, pip
 
 func (l *RunFiles) Do(ctx context.Context) error {
 	if len(l.files) == 0 {
-		return l.doOne(ctx, 0, "")
+		return l.doOne(ctx, 0, "", l.stdio.Stdout, l.stdio.Stderr)
 	}
 	for idx, name := range l.files {
-		err := l.doOne(ctx, idx, name)
+		err := l.doOne(ctx, idx, name, l.stdio.Stdout, l.stdio.Stderr)
 		if err != nil {
 			return err
 		}
@@ -42,7 +44,59 @@ func (l *RunFiles) Do(ctx context.Context) error {
 	return l.asPipeError()
 }
 
-func (l *RunFiles) doOne(ctx context.Context, idx int, name string) error {
+type in struct {
+	idx  int
+	name string
+}
+
+type out struct {
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+}
+
+// DoThreads runs individual tasks concurrently via PMap. Each command writes to the memory buffer
+// first, so probably best to be used for a compute intensive operations like cksum is. As it uses
+// PMap, outputs are in the same order as inputs.
+func (l *RunFiles) DoThreads(ctx context.Context, threads uint) error {
+	if threads == 0 {
+		threads = uint(runtime.GOMAXPROCS(0))
+	}
+	if threads == 1 || len(l.files) == 0 {
+		return l.Do(ctx)
+	}
+
+	one := func(ctx context.Context, in in) (out, error) {
+		out := out{
+			stdout: bytes.NewBuffer(nil),
+			stderr: bytes.NewBuffer(nil),
+		}
+		err := l.doOne(ctx, in.idx, in.name, out.stdout, out.stderr)
+		return out, err
+	}
+
+	inputs := make([]in, len(l.files))
+	for idx, f := range l.files {
+		inputs[idx] = in{idx: idx, name: f}
+	}
+
+	outputs, err := PMap(ctx, threads, inputs, one)
+	if err != nil {
+		return err
+	}
+	for _, out := range outputs {
+		_, err = io.Copy(l.stdio.Stderr, out.stderr)
+		if err != nil {
+			l.errs = multierror.Append(l.errs, err)
+		}
+		_, err = io.Copy(l.stdio.Stdout, out.stdout)
+		if err != nil {
+			l.errs = multierror.Append(l.errs, err)
+		}
+	}
+	return l.asPipeError()
+}
+
+func (l *RunFiles) doOne(ctx context.Context, idx int, name string, stdout, stderr io.Writer) error {
 	var in io.ReadCloser
 	if name == "" || name == "-" {
 		in = l.stdio.Stdin
@@ -58,8 +112,8 @@ func (l *RunFiles) doOne(ctx context.Context, idx int, name string) error {
 	}
 	return l.fun(ctx, pipe.Stdio{
 		Stdin:  in,
-		Stdout: l.stdio.Stdout,
-		Stderr: l.stdio.Stderr},
+		Stdout: stdout,
+		Stderr: stderr},
 		idx,
 		name,
 	)

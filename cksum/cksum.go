@@ -17,7 +17,8 @@ what is implemented
 ✅ --check --algorithm returns no properly formatted lines error for a different hash
 🚀 autodetect hash for untagged format - this include sha512 and blake2b
 🚀 parallel check or checksums from one file limited by -j/--threds, defaults to GOMAXPROC
-❌ parallel generation of checksums
+ parallel generation of checksums
+🚀 parallel check or checksums from one file limited by -j/--threds, defaults to GOMAXPROC
 
 
 what is not (yet)
@@ -27,11 +28,7 @@ what is not (yet)
     --strict    - cksum will return 1 by default
     -w/--warn
     --debug
-❌ everything around warns and counting various errors - this looks to be random at least
-    ❌ count improperly formatted lines
-    ❌ count mismatch errors
-    ❌ count not readable errors
-    ❌ special case for one line
+❌ everything around warns and counting various errors - this looks to be completely random at least
 
 */
 
@@ -47,7 +44,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"log"
 	"os"
@@ -259,7 +255,7 @@ func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) err
 	switch c.algorithm {
 	case CRC:
 		makeSum = func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
-			cksum, size, err := docrc(ctx, stdio)
+			cksum, size, err := docrc(ctx, func() simpleHash { return &crc{} }, stdio.Stdin)
 			if err != nil {
 				return err
 			}
@@ -267,7 +263,7 @@ func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) err
 			return nil
 		}
 	default:
-		hash, name, ok := c.algorithm.hash()
+		hash, name, ok := c.algorithm.hashFunc()
 		if !ok {
 			return fmt.Errorf("invalid argument %q for --algorithm", c.algorithm)
 		}
@@ -279,7 +275,7 @@ func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) err
 		stdio,
 		makeSum,
 	)
-	return runFiles.Do(ctx)
+	return runFiles.DoThreads(ctx, c.threads)
 }
 
 func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger) error {
@@ -288,7 +284,11 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 	}
 
 	ckSumOne := func(_ context.Context, line string) (checkResult, error) {
-		return c.checkLine(line, debug)
+		res, err := c.checkLine(line, debug)
+		if !c.ignoreMissing && err != nil {
+			return res, err
+		}
+		return res, nil
 	}
 
 	ckSum := func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
@@ -309,13 +309,12 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 			retErr = multierror.Append(retErr, err)
 		}
 
-		// TODO: checksum failed is not an error
 		for _, result := range results {
 			switch result.state {
 			case stNONE:
 				continue
 			case stOK:
-				if !c.quiet || !c.status {
+				if !c.quiet && !c.status {
 					fmt.Fprintf(stdio.Stdout, "%s: OK\n", result.name)
 				}
 			case stFAILED:
@@ -405,35 +404,39 @@ var crctab = [256]uint32{0x00000000,
 	0xa2f33668, 0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4,
 }
 
-// https://git.suckless.org/sbase/file/cksum.c.html#l74
-func docrc(ctx context.Context, stdio pipe.Stdio) (string, int, error) {
-	size := 0
+func docrc(_ context.Context, hashFunc func() simpleHash, stdin io.Reader) (string, int64, error) {
 	var buf [4096]byte
-
-	var ck uint32 = 0
-	for {
-		n, err := stdio.Stdin.Read(buf[:])
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if ctx.Err() != nil {
-			return "", 0, ctx.Err()
-		}
-		if err != nil {
-			return "", size, err
-		}
-		size += n
-
-		for i := 0; i < n; i++ {
-			ck = (ck << 8) ^ crctab[(ck>>24)^uint32(buf[i])]
-		}
+	hash := hashFunc()
+	n, err := io.CopyBuffer(hash, stdin, buf[:])
+	if err != nil {
+		return "", -1, err
 	}
+	return string(hash.Sum(nil)), n, nil
+}
 
-	for i := size; i != 0; i >>= 8 {
+type crc struct {
+	ck   uint32
+	size int
+}
+
+func (c *crc) Write(buf []byte) (int, error) {
+	n := len(buf)
+	c.size += n
+	ck := c.ck
+	// https://git.suckless.org/sbase/file/cksum.c.html#l74
+	for i := 0; i < n; i++ {
+		ck = (ck << 8) ^ crctab[(ck>>24)^uint32(buf[i])]
+	}
+	c.ck = ck
+	return n, nil
+}
+
+func (c crc) Sum(_ []byte) []byte {
+	ck := c.ck
+	for i := c.size; i != 0; i >>= 8 {
 		ck = (ck << 8) ^ crctab[(ck>>24)^uint32((i&0xFF))]
 	}
-
-	return fmt.Sprintf("%d", ^ck), size, nil
+	return []byte(fmt.Sprintf("%d", ^ck))
 }
 
 func (a Algorithm) Size() int {
@@ -457,26 +460,26 @@ func (a Algorithm) Size() int {
 	}
 }
 
-func (a Algorithm) hash() (hash.Hash, string, bool) {
+func (a Algorithm) hashFunc() (func() simpleHash, string, bool) {
 	switch a {
 	case MD5:
-		return md5.New(), "MD5", true
+		return func() simpleHash { return md5.New() }, "MD5", true
 	case SHA1:
-		return sha1.New(), "SHA1", true
+		return func() simpleHash { return sha1.New() }, "SHA1", true
 	case SHA224:
-		return sha256.New224(), "SHA224", true
+		return func() simpleHash { return sha256.New224() }, "SHA224", true
 	case SHA256:
-		return sha256.New(), "SHA256", true
+		return func() simpleHash { return sha256.New() }, "SHA256", true
 	case SHA384:
-		return sha512.New384(), "SHA338", true
+		return func() simpleHash { return sha512.New384() }, "SHA338", true
 	case SHA512:
-		return sha512.New(), "SHA512", true
+		return func() simpleHash { return sha512.New() }, "SHA512", true
 	case BLAKE2B:
 		hash, err := blake2b.New(64, nil)
 		if err != nil {
 			return nil, "", false
 		}
-		return hash, "BLAKE2b", true
+		return func() simpleHash { return hash }, "BLAKE2b", true
 	default:
 		return nil, "", false
 	}
@@ -505,9 +508,16 @@ func parseAlgorithm(s string) (Algorithm, error) {
 	return a, nil
 }
 
+// simpleHash implements just enough from hash.Hash interface
+// so suckless crc does not need to implement all methods
+type simpleHash interface {
+	io.Writer
+	Sum([]byte) []byte
+}
+
 // digest implements a digest for hash.Hash compatible stuff
 // md5, sha256
-func digest(hash hash.Hash, stdin io.Reader) (string, error) {
+func digest(hash simpleHash, stdin io.Reader) (string, error) {
 	var buf [4096]byte
 	_, err := io.CopyBuffer(hash, stdin, buf[:])
 	if err != nil {
@@ -517,8 +527,9 @@ func digest(hash hash.Hash, stdin io.Reader) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func newDigestFunc(hash hash.Hash, hashName string, untagged bool) func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
+func newDigestFunc(hashFunc func() simpleHash, hashName string, untagged bool) func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
 	return func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
+		hash := hashFunc()
 		cksum, err := digest(hash, stdio.Stdin)
 		if err != nil {
 			return err
@@ -631,7 +642,7 @@ func (c CKSum) checkLine(line string, debug *log.Logger) (checkResult, error) {
 				return zero, BadLineFormatError("--untagged must have two spaces between sum and file name")
 			}
 
-			hash, _, ok := algorithm.hash()
+			hash, _, ok := algorithm.hashFunc()
 			if !ok {
 				return zero, fmt.Errorf("unsupported --algorithm %q", c.algorithm)
 			}
@@ -639,16 +650,9 @@ func (c CKSum) checkLine(line string, debug *log.Logger) (checkResult, error) {
 			name := line[algorithm.Size()+2:]
 			err := checkSum(name, hash, line[:algorithm.Size()])
 			if err == nil {
-				/*if !c.quiet || !c.status {
-					fmt.Fprintf(stdout, "%s: OK\n", name)
-				}*/
 				return stateOK(name), nil
 			}
 			if errors.Is(err, errMismatch) {
-				/*if !c.status {
-					fmt.Fprintf(stdout, "%s: FAILED\n", name)
-				}
-				*/
 				return stateFAILED(name), nil
 			}
 			return stateIO(name), nil
@@ -699,21 +703,15 @@ func (c CKSum) checkLine(line string, debug *log.Logger) (checkResult, error) {
 	}
 	name := rest[1 : lr-4]
 
-	hash, _, ok := algorithm.hash()
+	hash, _, ok := algorithm.hashFunc()
 	if !ok {
 		return zero, fmt.Errorf("unsupported --algorithm %q", c.algorithm)
 	}
 	err = checkSum(name, hash, expected)
 	if err == nil {
-		/*if !c.quiet || !c.status {
-			fmt.Fprintf(stdout, "%s: OK\n", name)
-		}*/
 		return stateOK(name), nil
 	}
 	if errors.Is(err, errMismatch) {
-		/*if !c.status {
-			fmt.Fprintf(stdout, "%s: FAILED\n", name)
-		}*/
 		return stateFAILED(name), nil
 	}
 	if err != nil {
@@ -724,13 +722,13 @@ func (c CKSum) checkLine(line string, debug *log.Logger) (checkResult, error) {
 
 var errMismatch = errors.New("checksum mismatch") // never returned upper
 
-func checkSum(name string, hash hash.Hash, expected string) error {
+func checkSum(name string, hashFunc func() simpleHash, expected string) error {
 	f, err := os.Open(name)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	checkSum, err := digest(hash, f)
+	checkSum, err := digest(hashFunc(), f)
 	if err != nil {
 		return err
 	}
