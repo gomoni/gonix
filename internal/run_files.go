@@ -97,7 +97,7 @@ func (l *RunFiles) DoThreads(ctx context.Context, threads uint) error {
 }
 
 func (l *RunFiles) doOne(ctx context.Context, idx int, name string, stdout, stderr io.Writer) error {
-	var in io.ReadCloser
+	var in io.Reader
 	if name == "" || name == "-" {
 		in = l.stdio.Stdin
 	} else {

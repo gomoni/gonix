@@ -4,7 +4,6 @@ go 1.18
 
 require (
 	github.com/benhoyt/goawk v1.18.0
-	github.com/desertbit/go-shlex v0.1.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.1
