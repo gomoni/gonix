@@ -115,8 +115,8 @@ func (p Pipe) Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
 		isLast := idx == len(cmds)-1
 		go func(cancel context.CancelFunc, noPipeFail bool, cmd Filter, errChan chan<- error, stdin io.Reader, stdout io.WriteCloser) {
 			defer wg.Done()
-			defer closeReader(stdin)
-			defer closeWriter(stdout)
+			defer closePipe(stdin)
+			defer closePipe(stdout)
 
 			// XXX TODO FIXME: his it possible for go to deal with a failed predecessor?
 			// use atomics?
@@ -209,20 +209,12 @@ func (zeroReader) Read([]byte) (int, error) {
 	return 0, io.EOF
 }
 
-// closeWriter if io.Writer happens to implement io.Closer interface
-func closeWriter(w io.Writer) error {
-	wc, ok := w.(io.Closer)
-	if ok {
-		return wc.Close()
+// closePipe if an argument is *io.PipeWriter or *io.PipeReader returned by io.Pipe()
+func closePipe(x any) {
+	switch y := x.(type) {
+	case *io.PipeReader:
+		_ = y.Close()
+	case *io.PipeWriter:
+		_ = y.Close()
 	}
-	return nil
-}
-
-// closeReader if io.Reader happens to implement io.Closer interface
-func closeReader(r io.Reader) error {
-	rc, ok := r.(io.Closer)
-	if ok {
-		return rc.Close()
-	}
-	return nil
 }

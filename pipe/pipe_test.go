@@ -2,7 +2,6 @@ package pipe
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 	"strings"
@@ -110,23 +109,4 @@ func (mockCloser) Read(_ []byte) (int, error) {
 }
 func (mockCloser) Write(_ []byte) (int, error) {
 	panic("not implemented")
-}
-
-func TestAllwaysCloser(t *testing.T) {
-	t.Parallel()
-
-	m := mockCloser{closeErr: errors.New("Close() called")}
-
-	var r io.Reader = m
-	err := closeReader(r)
-	require.Error(t, err)
-	require.EqualError(t, err, "Close() called")
-
-	var w io.Writer = m
-	err = closeWriter(w)
-	require.Error(t, err)
-	require.EqualError(t, err, "Close() called")
-
-	err = closeReader(io.NopCloser(r))
-	require.NoError(t, err)
 }

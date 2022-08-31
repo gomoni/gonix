@@ -1,7 +1,6 @@
 # TODO
 
- * Stdin and Stdout are closed even if passed as io.Reader/io.Writer
- 
+Implement this?
 >       >128    A command was interrupted by a signal.
 
  * TODO: should we pass environ to builtins too?

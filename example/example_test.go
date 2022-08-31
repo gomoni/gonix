@@ -7,7 +7,6 @@ package example_test
 import (
 	"bytes"
 	"context"
-	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -16,14 +15,12 @@ import (
 	"github.com/gomoni/gonix/head"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/gomoni/gonix/wc"
-
-	shlex "github.com/desertbit/go-shlex"
 )
 
 // This example shows the pipe.Run
 func ExampleRun() {
 	stdio := pipe.Stdio{
-		Stdin:  io.NopCloser(bytes.NewBufferString("three\nsmall\npigs\n")),
+		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
@@ -40,7 +37,7 @@ func ExampleRun() {
 // This example shows the pipe.Run with command arguments passed as string slice
 func ExampleRun_from_args() {
 	stdio := pipe.Stdio{
-		Stdin:  io.NopCloser(bytes.NewBufferString("three\nsmall\npigs\n")),
+		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
@@ -89,9 +86,11 @@ func ExampleSh_Run() {
 		"cat": func(a []string) (pipe.Filter, error) { return cat.New().FromArgs(a) },
 		"wc":  func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
 	}
-	splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
+	// use real shlex code like github.com/desertbit/go-shlex
+	// splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
+	splitfn := func(s string) ([]string, error) { return []string{"cat", "|", "wc", "-l"}, nil }
 	stdio := pipe.Stdio{
-		Stdin:  io.NopCloser(bytes.NewBufferString("three\nsmall\npigs\n")),
+		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	}
@@ -111,7 +110,9 @@ func ExampleSh_Run_exec() {
 	builtins := map[string]func([]string) (pipe.Filter, error){
 		"wc": func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
 	}
-	splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
+	// use real shlex code like github.com/desertbit/go-shlex
+	// splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
+	splitfn := func(s string) ([]string, error) { return []string{"go", "version", "|", "wc", "-l"}, nil }
 	stdio := pipe.Stdio{
 		Stdin:  os.Stdin,
 		Stdout: os.Stdout,
@@ -132,7 +133,7 @@ func ExampleSh_Run_exec() {
 func ExampleHead_Run() {
 	head := head.New().Lines(2)
 	err := head.Run(context.TODO(), pipe.Stdio{
-		Stdin:  io.NopCloser(bytes.NewBufferString("three\nsmall\npigs\n")),
+		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
 		Stdout: os.Stdout,
 		Stderr: os.Stderr,
 	})
