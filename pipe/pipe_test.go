@@ -96,17 +96,3 @@ type errFilter struct {
 func (f errFilter) Run(_ context.Context, stdio Stdio) error {
 	return f.err
 }
-
-type mockCloser struct {
-	closeErr error
-}
-
-func (m mockCloser) Close() error {
-	return m.closeErr
-}
-func (mockCloser) Read(_ []byte) (int, error) {
-	panic("not implemented")
-}
-func (mockCloser) Write(_ []byte) (int, error) {
-	panic("not implemented")
-}
