@@ -99,7 +99,7 @@ func (p Pipe) Run(ctx context.Context, stdio Stdio, cmds ...Filter) error {
 
 	errChan := make(chan error, len(cmds))
 
-	in := stdio.Stdin
+	in := io.NopCloser(stdio.Stdin)
 	for idx, cmd := range cmds {
 		var nextIn io.ReadCloser
 		var out io.WriteCloser
