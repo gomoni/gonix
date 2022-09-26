@@ -81,7 +81,7 @@ type filter interface {
 		head.Head |
 		wc.Wc
 
-	Run(context.Context, pipe.Stdio) error
+	pipe.Filter
 }
 
 type arger[T filter] interface {

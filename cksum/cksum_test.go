@@ -17,57 +17,34 @@ import (
 
 func TestCKSum(t *testing.T) {
 	test.Parallel(t)
-	testCases := []testCase{
+	testCases := []test.Case[CKSum, *CKSum]{
 		{
-			"default",
-			New(),
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
-			"1340348198 27 \n",
+			Name:     "default",
+			Filter:   New(),
+			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			Expected: "1340348198 27 \n",
 		},
 		{
-			"default untagged",
-			New().Untagged(false),
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
-			"1340348198 27 \n",
+			Name:     "default untagged",
+			Filter:   New().Untagged(false),
+			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			Expected: "1340348198 27 \n",
 		},
 		{
-			"md5",
-			New().Algorithm(MD5),
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
-			"MD5 (-) = f4699b80440c0403b31fce987f9cd8af\n",
+			Name:     "md5",
+			Filter:   New().Algorithm(MD5),
+			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			Expected: "MD5 (-) = f4699b80440c0403b31fce987f9cd8af\n",
 		},
 		{
-			"md5 untagged",
-			New().Algorithm(MD5).Untagged(true),
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
-			"f4699b80440c0403b31fce987f9cd8af  -\n",
+			Name:     "md5 untagged",
+			Filter:   New().Algorithm(MD5).Untagged(true),
+			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			Expected: "f4699b80440c0403b31fce987f9cd8af  -\n",
 		},
 	}
 
 	test.RunAll(t, testCases)
-}
-
-type testCase struct {
-	name     string
-	cmd      *CKSum
-	input    string
-	expected string
-}
-
-func (tt testCase) Name() string {
-	return tt.name
-}
-
-func (tt testCase) Filter() pipe.Filter {
-	return tt.cmd
-}
-
-func (tt testCase) Input() io.ReadCloser {
-	return io.NopCloser(strings.NewReader(tt.input))
-}
-
-func (tt testCase) Expected() string {
-	return tt.expected
 }
 
 func initTemp(t *testing.T, name string) string {
@@ -97,6 +74,7 @@ func initTemp(t *testing.T, name string) string {
 }
 
 func spongef(t *testing.T, name string, format string, a ...any) {
+	t.Helper()
 	f, err := os.Create(name)
 	require.NoError(t, err)
 	defer f.Close()

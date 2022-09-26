@@ -25,57 +25,57 @@ func TestMain(m *testing.M) {
 func TestCat(t *testing.T) {
 	test.Parallel(t)
 
-	testCases := []testCase{
+	testCases := []test.Case[Cat, *Cat]{
 		{
-			"cat",
-			New(),
-			"three\nsmall\npigs\n",
-			"three\nsmall\npigs\n",
+			Name:     "cat",
+			Filter:   New(),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "three\nsmall\npigs\n",
 		},
 		// --show-all
 		{
-			"cat -b",
-			New().ShowNumber(NonBlank),
-			"three\n\n\nsmall\npigs\n",
-			"     1\tthree\n\n\n     2\tsmall\n     3\tpigs\n",
+			Name:     "cat -b",
+			Filter:   New().ShowNumber(NonBlank),
+			Input:    "three\n\n\nsmall\npigs\n",
+			Expected: "     1\tthree\n\n\n     2\tsmall\n     3\tpigs\n",
 		},
 		// -e   equivalent to -vE
 		{
-			"cat -E",
-			New().ShowEnds(true),
-			"three\nsmall\npigs\n",
-			"three$\nsmall$\npigs$\n",
+			Name:     "cat -E",
+			Filter:   New().ShowEnds(true),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "three$\nsmall$\npigs$\n",
 		},
 		{
-			"cat -n",
-			New().ShowNumber(All),
-			"three\nsmall\npigs\n",
-			"     1\tthree\n     2\tsmall\n     3\tpigs\n",
+			Name:     "cat -n",
+			Filter:   New().ShowNumber(All),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "     1\tthree\n     2\tsmall\n     3\tpigs\n",
 		},
 		{
-			"cat -s",
-			New().SqueezeBlanks(true),
-			"three\n\n\nsmall\npigs\n",
-			"three\n\nsmall\npigs\n",
+			Name:     "cat -s",
+			Filter:   New().SqueezeBlanks(true),
+			Input:    "three\n\n\nsmall\npigs\n",
+			Expected: "three\n\nsmall\npigs\n",
 		},
 		// -t     equivalent to -vT
 		{
-			"cat -T",
-			New().ShowTabs(true),
-			"\tthree\nsmall\t\npi\tgs\n",
-			"^Ithree\nsmall^I\npi^Igs\n",
+			Name:     "cat -T",
+			Filter:   New().ShowTabs(true),
+			Input:    "\tthree\nsmall\t\npi\tgs\n",
+			Expected: "^Ithree\nsmall^I\npi^Igs\n",
 		},
 		{
-			"cat -ET",
-			New().ShowEnds(true).ShowTabs(true),
-			"\tthree\nsmall\t\npi\tgs\n",
-			"^Ithree$\nsmall^I$\npi^Igs$\n",
+			Name:     "cat -ET",
+			Filter:   New().ShowEnds(true).ShowTabs(true),
+			Input:    "\tthree\nsmall\t\npi\tgs\n",
+			Expected: "^Ithree$\nsmall^I$\npi^Igs$\n",
 		},
 		{
-			"cat -A",
-			New().ShowNonPrinting(true).ShowEnds(true).ShowTabs(true),
-			string(rune(127)) + "\tthree\nsmall\t\npi\tgs\n",
-			"^?^Ithree$\nsmall^I$\npi^Igs$\n",
+			Name:     "cat -A",
+			Filter:   New().ShowNonPrinting(true).ShowEnds(true).ShowTabs(true),
+			Input:    string(rune(127)) + "\tthree\nsmall\t\npi\tgs\n",
+			Expected: "^?^Ithree$\nsmall^I$\npi^Igs$\n",
 		},
 	}
 
@@ -152,27 +152,4 @@ func TestError(t *testing.T) {
 		require.Contains(t, e.Err.Error(), "main.c")
 	})
 
-}
-
-type testCase struct {
-	name     string
-	cmd      *Cat
-	input    string
-	expected string
-}
-
-func (tt testCase) Name() string {
-	return tt.name
-}
-
-func (tt testCase) Filter() pipe.Filter {
-	return tt.cmd
-}
-
-func (tt testCase) Input() io.ReadCloser {
-	return io.NopCloser(strings.NewReader(tt.input))
-}
-
-func (tt testCase) Expected() string {
-	return tt.expected
 }
