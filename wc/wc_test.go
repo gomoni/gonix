@@ -6,12 +6,9 @@ package wc_test
 
 import (
 	"fmt"
-	"io"
-	"strings"
 	"testing"
 
 	"github.com/gomoni/gonix/internal/test"
-	"github.com/gomoni/gonix/pipe"
 	. "github.com/gomoni/gonix/wc"
 
 	"github.com/stretchr/testify/require"
@@ -36,55 +33,32 @@ func TestWc(t *testing.T) {
 	test.Parallel(t)
 	dflt, err := New().FromArgs(nil)
 	require.NoError(t, err)
-	testCases := []testCase{
+	testCases := []test.Case[Wc, *Wc]{
 		{
-			"default",
-			dflt,
-			"The three\nsmall\npigs\n",
-			" 3 4 21\n",
+			Name:     "default",
+			Filter:   dflt,
+			Input:    "The three\nsmall\npigs\n",
+			Expected: " 3 4 21\n",
 		},
 		{
-			"wc -l",
-			New().Lines(true),
-			"three\nsmall\npigs\n",
-			"3\n",
+			Name:     "wc -l",
+			Filter:   New().Lines(true),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "3\n",
 		},
 		{
-			"wc -cmlLw",
-			New().Bytes(true).Chars(true).Lines(true).MaxLineLength(true).Words(true),
-			"The three žluťoučká\nsmall\npigs\n",
-			" 3 5 31 35 19\n",
+			Name:     "wc -cmlLw",
+			Filter:   New().Bytes(true).Chars(true).Lines(true).MaxLineLength(true).Words(true),
+			Input:    "The three žluťoučká\nsmall\npigs\n",
+			Expected: " 3 5 31 35 19\n",
 		},
 		{
-			"wc - three-small-pigs",
-			New().Lines(true).Files("-", threeSmallPigs),
-			"1\n2\n3\n4\n",
-			fmt.Sprintf(" 4 -\n 3 %s\n 7 total\n", threeSmallPigs),
+			Name:     "wc - three-small-pigs",
+			Filter:   New().Lines(true).Files("-", threeSmallPigs),
+			Input:    "1\n2\n3\n4\n",
+			Expected: fmt.Sprintf(" 4 -\n 3 %s\n 7 total\n", threeSmallPigs),
 		},
 	}
 
 	test.RunAll(t, testCases)
-}
-
-type testCase struct {
-	name     string
-	cmd      *Wc
-	input    string
-	expected string
-}
-
-func (tt testCase) Name() string {
-	return tt.name
-}
-
-func (tt testCase) Filter() pipe.Filter {
-	return tt.cmd
-}
-
-func (tt testCase) Input() io.ReadCloser {
-	return io.NopCloser(strings.NewReader(tt.input))
-}
-
-func (tt testCase) Expected() string {
-	return tt.expected
 }

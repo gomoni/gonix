@@ -5,42 +5,39 @@
 package head_test
 
 import (
-	"io"
-	"strings"
 	"testing"
 
 	. "github.com/gomoni/gonix/head"
 	"github.com/gomoni/gonix/internal/test"
-	"github.com/gomoni/gonix/pipe"
 	"github.com/stretchr/testify/require"
 )
 
 func TestHead(t *testing.T) {
 	test.Parallel(t)
-	testCases := []testCase{
+	testCases := []test.Case[Head, *Head]{
 		{
-			"default",
-			New(),
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n",
+			Name:     "default",
+			Filter:   New(),
+			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			Expected: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n",
 		},
 		{
-			"--lines 2",
-			New().Lines(2),
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
-			"1\n2\n",
+			Name:     "--lines 2",
+			Filter:   New().Lines(2),
+			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			Expected: "1\n2\n",
 		},
 		{
-			"--lines -10",
-			New().Lines(-10),
-			"1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
-			"1\n2\n",
+			Name:     "--lines -10",
+			Filter:   New().Lines(-10),
+			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
+			Expected: "1\n2\n",
 		},
 		{
-			"--lines 2 --zero-terminated",
-			New().Lines(2).ZeroTerminated(true),
-			"1\x002\x003\x004\x00",
-			"1\n2\n",
+			Name:     "--lines 2 --zero-terminated",
+			Filter:   New().Lines(2).ZeroTerminated(true),
+			Input:    "1\x002\x003\x004\x00",
+			Expected: "1\n2\n",
 		},
 	}
 
@@ -80,27 +77,4 @@ func TestFromArgs(t *testing.T) {
 			require.Equal(t, tt.expected, head)
 		})
 	}
-}
-
-type testCase struct {
-	name     string
-	cmd      *Head
-	input    string
-	expected string
-}
-
-func (tt testCase) Name() string {
-	return tt.name
-}
-
-func (tt testCase) Filter() pipe.Filter {
-	return tt.cmd
-}
-
-func (tt testCase) Input() io.ReadCloser {
-	return io.NopCloser(strings.NewReader(tt.input))
-}
-
-func (tt testCase) Expected() string {
-	return tt.expected
 }

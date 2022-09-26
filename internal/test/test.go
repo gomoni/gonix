@@ -5,6 +5,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -27,37 +28,39 @@ func Parallel(t *testing.T) {
 	}
 }
 
-type TestCase interface {
-	Name() string
-	Input() io.ReadCloser
-	Filter() pipe.Filter
-	Expected() string
+// Case is a single test case testing gonix filter
+// It contains a pointer (PF) to type implementing the pipe.Filter interface
+type Case[F pipe.Filter, PF interface{ *F }] struct {
+	Name     string // Name is test case name
+	Input    string // Input is test case input
+	Expected string // Expected is what filter is expected to produce
+	Filter   PF     // Filter is a pointer to type implementing the pipe.Filter
 }
 
-func RunAll[T TestCase](t *testing.T, testCases []T) {
+func RunAll[F pipe.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F, PF]) {
 	t.Helper()
 
 	for _, tt := range testCases {
 		tt := tt
-		t.Run(tt.Name(), func(t *testing.T) {
+		t.Run(tt.Name, func(t *testing.T) {
 			Parallel(t)
 
 			var out strings.Builder
 			stdio := pipe.Stdio{
-				Stdin:  tt.Input(),
+				Stdin:  bytes.NewBufferString(tt.Input),
 				Stdout: &out,
 				Stderr: os.Stderr,
 			}
 			ctx := context.Background()
 
-			x := reflect.ValueOf(tt.Filter())
+			x := reflect.ValueOf(tt.Filter)
 			setDebug := x.MethodByName("SetDebug")
 			if setDebug.Kind() == reflect.Func {
 				setDebug.Call([]reflect.Value{reflect.ValueOf(testing.Verbose())})
 			}
-			err := pipe.Run(ctx, stdio, tt.Filter())
+			err := pipe.Run(ctx, stdio, *tt.Filter)
 			require.NoError(t, err)
-			require.Equal(t, tt.Expected(), out.String())
+			require.Equal(t, tt.Expected, out.String())
 		})
 	}
 }
