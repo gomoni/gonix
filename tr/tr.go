@@ -51,6 +51,7 @@ Notes for an implementation:
 */
 
 type Tr struct {
+	debug      bool
 	array1     string
 	array2     string
 	complement bool // use complement of ARRAY1
@@ -59,15 +60,43 @@ type Tr struct {
 	files      []string
 }
 
+func New() *Tr {
+	return &Tr{}
+}
+
+func (c *Tr) Array1(in string) *Tr {
+	c.array1 = in
+	return c
+}
+
+func (c *Tr) Complement(b bool) *Tr {
+	c.complement = b
+	return c
+}
+
+func (c *Tr) Delete(b bool) *Tr {
+	c.del = b
+	return c
+}
+
 func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
+	//c.debug = true
+	//debug := dbg.Logger(c.debug, "tr", stdio.Stderr)
 	var chain chain
 	if c.del {
-		chain = newChain(newDeleteTr(c.array1).Tr)
+		if !c.complement {
+			chain = newChain(newDeleteTr(c.array1))
+		} else {
+			chain = newChain(newDeleteComplementTr(c.array1))
+		}
+	} else {
+		panic("tr without -d/--delete is not yet implemented")
 	}
 
 	tr := func(ctx context.Context, stdio pipe.Stdio, _ int, _ string) error {
 		scanner := bufio.NewScanner(stdio.Stdin)
 		stdout := bufio.NewWriterSize(stdio.Stdout, 4096)
+		defer stdout.Flush()
 		scanner.Split(bufio.ScanRunes)
 		for scanner.Scan() {
 			if scanner.Err() != nil {
@@ -75,6 +104,9 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 			}
 			in, _ := utf8.DecodeRuneInString(scanner.Text())
 			rn, _ := chain.Tr(in)
+			if rn == -1 {
+				continue
+			}
 			_, err := writeRune(stdout, rn)
 			if err != nil {
 				return err
@@ -196,19 +228,33 @@ func (t deleteTr) Tr(in rune) (rune, bool) {
 	return in, true
 }
 
+// delete complement
+type deleteComplementTr struct {
+	tr map[rune]struct{}
+}
+
+func newDeleteComplementTr(array1 string) deleteComplementTr {
+	return deleteComplementTr{
+		tr: strToRunes(array1),
+	}
+}
+
+func (t deleteComplementTr) Tr(in rune) (rune, bool) {
+	if _, ok := t.tr[in]; !ok {
+		return -1, true
+	}
+	return in, true
+}
+
 // squeeze \NNN \\ \a et all
 
 type chain struct {
 	trs []tr
 }
 
-func newChain(in ...func(rune) (rune, bool)) chain {
-	trs := make([]tr, len(in))
-	for idx, x := range in {
-		trs[idx] = trFunc(x)
-	}
+func newChain(in ...tr) chain {
 	return chain{
-		trs: trs,
+		trs: in,
 	}
 }
 
