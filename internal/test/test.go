@@ -35,6 +35,7 @@ type Case[F pipe.Filter, PF interface{ *F }] struct {
 	Input    string // Input is test case input
 	Expected string // Expected is what filter is expected to produce
 	Filter   PF     // Filter is a pointer to type implementing the pipe.Filter
+	FromArgs PF     // Optional Filter constructed via FromArgs helper, expected to be equal to Filter
 }
 
 func RunAll[F pipe.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F, PF]) {
@@ -53,11 +54,17 @@ func RunAll[F pipe.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F,
 			}
 			ctx := context.Background()
 
+			if tt.FromArgs != nil {
+				require.Equal(t, tt.FromArgs, tt.Filter)
+			}
+
+			// call SetDebug(true) if present and test if verbose
 			x := reflect.ValueOf(tt.Filter)
 			setDebug := x.MethodByName("SetDebug")
 			if setDebug.Kind() == reflect.Func {
 				setDebug.Call([]reflect.Value{reflect.ValueOf(testing.Verbose())})
 			}
+
 			err := pipe.Run(ctx, stdio, *tt.Filter)
 			require.NoError(t, err)
 			require.Equal(t, tt.Expected, out.String())

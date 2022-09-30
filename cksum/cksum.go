@@ -140,17 +140,7 @@ type CKSum struct {
 }
 
 func New() *CKSum {
-	return &CKSum{
-		threads:       0,
-		debug:         false,
-		algorithm:     NONE,
-		check:         false,
-		untagged:      false,
-		ignoreMissing: false,
-		quiet:         false,
-		status:        false,
-		files:         []string{},
-	}
+	return &CKSum{}
 }
 
 // Files are input files, where - denotes stdin
@@ -208,6 +198,7 @@ func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	ignoreMissing := flag.Bool("ignore-missing", false, "ignore missing files")
 	quiet := flag.Bool("quiet", false, "do not print OK for every verified file")
 	status := flag.Bool("status", false, "report status code only")
+
 	// GNU is not consistent with parallel naming (make uses -j/--jobs, xargs -P and so
 	// used -j/--threads as ripgrep does
 	var threads uint
@@ -216,7 +207,10 @@ func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	if err != nil {
 		return nil, pipe.NewErrorf(1, "cksum: parsing failed: %w", err)
 	}
-	c.files = flag.Args()
+
+	if len(flag.Args()) > 0 {
+		c.files = flag.Args()
+	}
 
 	c.algorithm = algorithm
 	if c.algorithm == CRC || *untagged {
@@ -245,7 +239,6 @@ func (c CKSum) Run(ctx context.Context, stdio pipe.Stdio) error {
 }
 
 func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) error {
-
 	if c.algorithm == NONE {
 		c.algorithm = CRC
 	}
@@ -586,8 +579,9 @@ func stateIO(name string) checkResult {
 }
 
 // parse untagged and tagged formats
-//  * untagged  hash name
-//  * tagged HASH(name) = hash
+//   - untagged  hash name
+//   - tagged HASH(name) = hash
+//
 // returns errors
 // 1. BadLineFormatError for untagged format and algorithm NONE (unless autodetected)
 // 2. BadLineFormatError for tagged format and a different hash
