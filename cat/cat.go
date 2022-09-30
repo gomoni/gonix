@@ -62,7 +62,7 @@ func New() *Cat {
 	return &Cat{}
 }
 
-// FromArgs build a CatFilter from standard argv except the command name (os.Argv[1:])
+// FromArgs build a Cat from standard argv except the command name (os.Argv[1:])
 func (c *Cat) FromArgs(argv []string) (*Cat, error) {
 	flag := pflag.FlagSet{}
 
@@ -80,6 +80,12 @@ func (c *Cat) FromArgs(argv []string) (*Cat, error) {
 	// TODO FIXME - single dash options only - this accepts -e and --e
 	flag.BoolVarP(&e, "e", "e", false, "equivalent of -vE")
 	flag.BoolVarP(&t, "t", "t", false, "equivalent of -vT")
+
+	err := flag.Parse(argv)
+	if err != nil {
+		return nil, pipe.NewErrorf(1, "cat: parsing failed: %w", err)
+	}
+
 	if all {
 		c.ShowNonPrinting(true).ShowEnds(true).ShowTabs(true)
 	}
@@ -90,17 +96,15 @@ func (c *Cat) FromArgs(argv []string) (*Cat, error) {
 		c.ShowNonPrinting(true).ShowTabs(true)
 	}
 
-	err := flag.Parse(argv)
-	if err != nil {
-		return nil, pipe.NewErrorf(1, "cat: parsing failed: %w", err)
+	if len(flag.Args()) > 0 {
+		c.files = flag.Args()
 	}
-	c.files = flag.Args()
 
 	// post process
 	if *nb {
 		c.ShowNumber(NonBlank)
 	} else if *na {
-		c.ShowNumber(NonBlank)
+		c.ShowNumber(All)
 	}
 
 	return c, nil

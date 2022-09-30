@@ -29,6 +29,7 @@ func TestCat(t *testing.T) {
 		{
 			Name:     "cat",
 			Filter:   New(),
+			FromArgs: fromArgs(t, nil),
 			Input:    "three\nsmall\npigs\n",
 			Expected: "three\nsmall\npigs\n",
 		},
@@ -36,6 +37,7 @@ func TestCat(t *testing.T) {
 		{
 			Name:     "cat -b",
 			Filter:   New().ShowNumber(NonBlank),
+			FromArgs: fromArgs(t, []string{"-b"}),
 			Input:    "three\n\n\nsmall\npigs\n",
 			Expected: "     1\tthree\n\n\n     2\tsmall\n     3\tpigs\n",
 		},
@@ -43,18 +45,21 @@ func TestCat(t *testing.T) {
 		{
 			Name:     "cat -E",
 			Filter:   New().ShowEnds(true),
+			FromArgs: fromArgs(t, []string{"-E"}),
 			Input:    "three\nsmall\npigs\n",
 			Expected: "three$\nsmall$\npigs$\n",
 		},
 		{
 			Name:     "cat -n",
 			Filter:   New().ShowNumber(All),
+			FromArgs: fromArgs(t, []string{"-n"}),
 			Input:    "three\nsmall\npigs\n",
 			Expected: "     1\tthree\n     2\tsmall\n     3\tpigs\n",
 		},
 		{
 			Name:     "cat -s",
 			Filter:   New().SqueezeBlanks(true),
+			FromArgs: fromArgs(t, []string{"-s"}),
 			Input:    "three\n\n\nsmall\npigs\n",
 			Expected: "three\n\nsmall\npigs\n",
 		},
@@ -62,23 +67,25 @@ func TestCat(t *testing.T) {
 		{
 			Name:     "cat -T",
 			Filter:   New().ShowTabs(true),
+			FromArgs: fromArgs(t, []string{"-T"}),
 			Input:    "\tthree\nsmall\t\npi\tgs\n",
 			Expected: "^Ithree\nsmall^I\npi^Igs\n",
 		},
 		{
 			Name:     "cat -ET",
 			Filter:   New().ShowEnds(true).ShowTabs(true),
+			FromArgs: fromArgs(t, []string{"-ET"}),
 			Input:    "\tthree\nsmall\t\npi\tgs\n",
 			Expected: "^Ithree$\nsmall^I$\npi^Igs$\n",
 		},
 		{
 			Name:     "cat -A",
 			Filter:   New().ShowNonPrinting(true).ShowEnds(true).ShowTabs(true),
+			FromArgs: fromArgs(t, []string{"-A"}),
 			Input:    string(rune(127)) + "\tthree\nsmall\t\npi\tgs\n",
 			Expected: "^?^Ithree$\nsmall^I$\npi^Igs$\n",
 		},
 	}
-
 	test.RunAll(t, testCases)
 }
 
@@ -152,4 +159,12 @@ func TestError(t *testing.T) {
 		require.Contains(t, e.Err.Error(), "main.c")
 	})
 
+}
+
+func fromArgs(t *testing.T, argv []string) *Cat {
+	t.Helper()
+	n := New()
+	f, err := n.FromArgs(argv)
+	require.NoError(t, err)
+	return f
 }

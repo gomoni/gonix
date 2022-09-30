@@ -17,64 +17,39 @@ func TestHead(t *testing.T) {
 	testCases := []test.Case[Head, *Head]{
 		{
 			Name:     "default",
-			Filter:   New(),
+			Filter:   fromArgs(t, []string{}),
 			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			Expected: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n",
 		},
 		{
 			Name:     "--lines 2",
 			Filter:   New().Lines(2),
+			FromArgs: fromArgs(t, []string{"-n", "2"}),
 			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			Expected: "1\n2\n",
 		},
 		{
 			Name:     "--lines -10",
 			Filter:   New().Lines(-10),
+			FromArgs: fromArgs(t, []string{"-n", "-10"}),
 			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			Expected: "1\n2\n",
 		},
 		{
 			Name:     "--lines 2 --zero-terminated",
 			Filter:   New().Lines(2).ZeroTerminated(true),
+			FromArgs: fromArgs(t, []string{"-n", "2", "--zero-terminated"}),
 			Input:    "1\x002\x003\x004\x00",
 			Expected: "1\n2\n",
 		},
 	}
-
 	test.RunAll(t, testCases)
 }
 
-func TestFromArgs(t *testing.T) {
-	test.Parallel(t)
-	testCases := []struct {
-		name     string
-		args     []string
-		expected *Head
-	}{
-		{
-			"default",
-			nil,
-			New(),
-		},
-		{
-			"lines",
-			[]string{"--lines", "10KiB"},
-			New().Lines(10240),
-		},
-		{
-			"zero terminated",
-			[]string{"--zero-terminated"},
-			New().ZeroTerminated(true),
-		},
-	}
-
-	for _, tt := range testCases {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			test.Parallel(t)
-			head, err := New().FromArgs(tt.args)
-			require.NoError(t, err)
-			require.Equal(t, tt.expected, head)
-		})
-	}
+func fromArgs(t *testing.T, argv []string) *Head {
+	t.Helper()
+	n := New()
+	f, err := n.FromArgs(argv)
+	require.NoError(t, err)
+	return f
 }
