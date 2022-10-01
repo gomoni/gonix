@@ -14,51 +14,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO: convert to table test
-func TestWcFromArgs(t *testing.T) {
-
-	wc1 := New().Bytes(true).Lines(true).Words(true)
-	wc2, err := New().FromArgs([]string{})
-	require.NoError(t, err)
-	require.Equal(t, wc1, wc2)
-
-	wc1 = New().Lines(true)
-	wc2, err = New().FromArgs([]string{"--lines"})
-	require.NoError(t, err)
-	require.Equal(t, wc1, wc2)
-}
-
 func TestWc(t *testing.T) {
-	threeSmallPigs := test.Testdata(t, "three-small-pigs")
 	test.Parallel(t)
-	dflt, err := New().FromArgs(nil)
-	require.NoError(t, err)
+	threeSmallPigs := test.Testdata(t, "three-small-pigs")
 	testCases := []test.Case[Wc, *Wc]{
 		{
 			Name:     "default",
-			Filter:   dflt,
+			Filter:   fromArgs(t, []string{}),
 			Input:    "The three\nsmall\npigs\n",
 			Expected: " 3 4 21\n",
 		},
 		{
 			Name:     "wc -l",
 			Filter:   New().Lines(true),
+			FromArgs: fromArgs(t, []string{"-l"}),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "3\n",
+		},
+		{
+			Name:     "wc --lines",
+			Filter:   New().Lines(true),
+			FromArgs: fromArgs(t, []string{"--lines"}),
 			Input:    "three\nsmall\npigs\n",
 			Expected: "3\n",
 		},
 		{
 			Name:     "wc -cmlLw",
 			Filter:   New().Bytes(true).Chars(true).Lines(true).MaxLineLength(true).Words(true),
+			FromArgs: fromArgs(t, []string{"-cmlLw"}),
 			Input:    "The three žluťoučká\nsmall\npigs\n",
 			Expected: " 3 5 31 35 19\n",
 		},
 		{
-			Name:     "wc - three-small-pigs",
+			Name:     "wc -l - three-small-pigs",
 			Filter:   New().Lines(true).Files("-", threeSmallPigs),
+			FromArgs: fromArgs(t, []string{"-l", "-", threeSmallPigs}),
 			Input:    "1\n2\n3\n4\n",
 			Expected: fmt.Sprintf(" 4 -\n 3 %s\n 7 total\n", threeSmallPigs),
 		},
 	}
 
 	test.RunAll(t, testCases)
+}
+
+func fromArgs(t *testing.T, argv []string) *Wc {
+	t.Helper()
+	n := New()
+	f, err := n.FromArgs(argv)
+	require.NoError(t, err)
+	return f
 }

@@ -71,6 +71,9 @@ func (c *Wc) FromArgs(argv []string) (*Wc, error) {
 	if err != nil {
 		return nil, pipe.NewErrorf(1, "wc: parsing failed: %w", err)
 	}
+	if len(flag.Args()) > 0 {
+		c.files = flag.Args()
+	}
 
 	return c, nil
 }

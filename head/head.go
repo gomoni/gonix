@@ -33,15 +33,15 @@ type Head struct {
 }
 
 func New() *Head {
-	return &Head{
-		debug:          false,
-		lines:          10,
-		zeroTerminated: false,
-		files:          []string{},
-	}
+	return &Head{}
 }
 
 func (c *Head) FromArgs(argv []string) (*Head, error) {
+	if len(argv) == 0 {
+		c = c.Lines(10)
+		return c, nil
+	}
+
 	flag := pflag.FlagSet{}
 
 	var lines internal.Byte = internal.Byte(c.lines)
@@ -53,7 +53,9 @@ func (c *Head) FromArgs(argv []string) (*Head, error) {
 	if err != nil {
 		return nil, pipe.NewErrorf(1, "head: parsing failed: %w", err)
 	}
-	c.files = flag.Args()
+	if len(flag.Args()) > 0 {
+		c.files = flag.Args()
+	}
 
 	// TODO: deal with more than int64 lines
 	c.lines = int(math.Round(float64(lines)))

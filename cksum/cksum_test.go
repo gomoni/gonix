@@ -20,25 +20,28 @@ func TestCKSum(t *testing.T) {
 	testCases := []test.Case[CKSum, *CKSum]{
 		{
 			Name:     "default",
-			Filter:   New(),
+			Filter:   fromArgs(t, nil),
 			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			Expected: "1340348198 27 \n",
 		},
 		{
 			Name:     "default untagged",
 			Filter:   New().Untagged(false),
+			FromArgs: fromArgs(t, nil),
 			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			Expected: "1340348198 27 \n",
 		},
 		{
 			Name:     "md5",
 			Filter:   New().Algorithm(MD5),
+			FromArgs: fromArgs(t, []string{"--algorithm", "md5"}),
 			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			Expected: "MD5 (-) = f4699b80440c0403b31fce987f9cd8af\n",
 		},
 		{
 			Name:     "md5 untagged",
 			Filter:   New().Algorithm(MD5).Untagged(true),
+			FromArgs: fromArgs(t, []string{"--algorithm", "md5", "--untagged"}),
 			Input:    "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n",
 			Expected: "f4699b80440c0403b31fce987f9cd8af  -\n",
 		},
@@ -231,67 +234,10 @@ func TestCheck(t *testing.T) {
 
 }
 
-func TestFromArgs(t *testing.T) {
-	test.Parallel(t)
-	testCases := []struct {
-		name     string
-		args     []string
-		expected *CKSum
-	}{
-		{
-			"default",
-			nil,
-			New(),
-		},
-		{
-			"--check",
-			[]string{"--check"},
-			New().Check(true),
-		},
-		{
-			"--tag",
-			[]string{"--tag"},
-			New(),
-		},
-		{
-			"--algorithm crc",
-			[]string{"--algorithm", "crc"},
-			New().Algorithm(CRC).Untagged(true),
-		},
-		{
-			"--algorithm sha1",
-			[]string{"--algorithm", "sha1"},
-			New().Algorithm(SHA1),
-		},
-		{
-			"--algorithm blake2b --untagged",
-			[]string{"--algorithm", "blake2b", "--untagged"},
-			New().Algorithm(BLAKE2B).Untagged(true),
-		},
-		{
-			"--ignore-missing",
-			[]string{"--ignore-missing"},
-			New().IgnoreMissing(true),
-		},
-		{
-			"--quiet",
-			[]string{"--quiet"},
-			New().Quiet(true),
-		},
-		{
-			"--status",
-			[]string{"--status"},
-			New().Status(true),
-		},
-	}
-
-	for _, tt := range testCases {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			test.Parallel(t)
-			cksum, err := New().FromArgs(tt.args)
-			require.NoError(t, err)
-			require.Equal(t, tt.expected, cksum)
-		})
-	}
+func fromArgs(t *testing.T, argv []string) *CKSum {
+	t.Helper()
+	n := New()
+	f, err := n.FromArgs(argv)
+	require.NoError(t, err)
+	return f
 }
