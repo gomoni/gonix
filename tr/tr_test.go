@@ -1,7 +1,6 @@
 package tr
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/gomoni/gonix/internal/test"
@@ -13,7 +12,35 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-func TestCat(t *testing.T) {
+func TestFoo(t *testing.T) {
+	var s = trMap{
+		'a': -1,
+		'b': -1,
+	}
+	tr := delTr{pred: s.in}
+	rn, ok := tr.Tr('a')
+	require.True(t, ok)
+	require.EqualValues(t, -1, rn)
+	rn, ok = tr.Tr('x')
+	require.False(t, ok)
+	require.Equal(t, 'x', rn)
+
+	tr = delTr{pred: s.notIn}
+	rn, ok = tr.Tr('a')
+	require.False(t, ok)
+	require.Equal(t, 'a', rn)
+	rn, ok = tr.Tr('x')
+	require.True(t, ok)
+	require.EqualValues(t, -1, rn)
+
+	tr = delTr{pred: xdigit}
+	_, ok = tr.Tr('x')
+	require.False(t, ok)
+	_, ok = tr.Tr('b')
+	require.True(t, ok)
+}
+
+func TestTr(t *testing.T) {
 	test.Parallel(t)
 	testCases := []test.Case[Tr, *Tr]{
 		{
@@ -23,15 +50,34 @@ func TestCat(t *testing.T) {
 			Expected: "thr\nsmll\npgs\n",
 		},
 		{
-			Name:     "tr -d -c aeiou",
-			Filter:   New().Array1("aeiou").Delete(true).Complement(true),
+			Name:     "tr -d [:space:]",
+			Filter:   New().Array1("[:space:]").Delete(true),
 			Input:    "three\nsmall\npigs\n",
-			Expected: "eeai",
+			Expected: "threesmallpigs",
+		},
+		{
+			Name:     "tr -d \\n",
+			Filter:   New().Array1("\\n").Delete(true),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "threesmallpigs",
+		},
+		{
+			Name:     "tr -d [=t=]\\n",
+			Filter:   New().Array1("[=t=]\\n").Delete(true),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "hreesmallpigs",
+		},
+		{
+			Name:     "tr -d [:digit:][=t=]\\n",
+			Filter:   New().Array1("[:digit:][=t=]\\n").Delete(true),
+			Input:    "1:three\n2:small\n3:pigs\n",
+			Expected: ":hree:small:pigs",
 		},
 	}
 	test.RunAll(t, testCases)
 }
 
+/*
 func TestTrString(t *testing.T) {
 	t.Parallel()
 	i2Hash := mapTr(map[rune]rune{'i': '#'})
@@ -61,3 +107,4 @@ func TestTrString(t *testing.T) {
 		})
 	}
 }
+*/
