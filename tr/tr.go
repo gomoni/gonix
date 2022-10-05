@@ -88,7 +88,7 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 	debug := dbg.Logger(c.debug, "tr", stdio.Stderr)
 	var chain chain
 	if c.del {
-		trs, err := makeDelChain(c.array1, c.complement)
+		trs, err := c.makeDelChain(c.array1)
 		if err != nil {
 			return err
 		}
@@ -200,6 +200,7 @@ func xdigit(in rune) bool {
 // delTr implements tr interface for --delete and --delete --complement operations
 type delTr struct {
 	pred trPred
+	name string
 }
 
 func (t delTr) Tr(in rune) (rune, bool) {
@@ -237,22 +238,6 @@ func (t chain) Tr(in rune) (rune, bool) {
 	return in, true
 }
 
-func trString(in string, chain chain, out io.Writer) error {
-	var err error
-
-	for _, rn := range in {
-		dst, _ := chain.Tr(rn)
-		if dst == -1 {
-			continue
-		}
-		_, err = writeRune(out, dst)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // https://cs.opensource.google/go/go/+/refs/tags/go1.19.1:src/strings/builder.go;l=104
 // WriteRune appends the UTF-8 encoding of Unicode code point r to b's buffer.
 // It returns the length of r and a nil error.
@@ -287,10 +272,16 @@ var trClasses = map[string]trPred{
 }
 
 // makeDelChain parse ARRAY1 to generate a proper tr chain
-func makeDelChain(array1 string, complement bool) ([]tr, error) {
-	if complement {
+func (c Tr) makeDelChain(array1 string) ([]tr, error) {
+	if c.complement {
 		panic("--complement is not yet implemented")
 	}
+
+	sprintf := func(string, ...any) string { return "" }
+	if c.debug {
+		sprintf = func(f string, a ...any) string { return fmt.Sprintf(f, a) }
+	}
+
 	ret := make([]tr, 0, 10)
 	globalSet := make(trMap)
 
@@ -307,7 +298,7 @@ func makeDelChain(array1 string, complement bool) ([]tr, error) {
 			if !ok {
 				return nil, fmt.Errorf("invalid character class %q", klass)
 			}
-			ret = append(ret, delTr{pred: pred})
+			ret = append(ret, delTr{pred: pred, name: sprintf("[:%s:]", klass)})
 			idx = next
 			continue
 		}
@@ -322,7 +313,7 @@ func makeDelChain(array1 string, complement bool) ([]tr, error) {
 			for rn := from; rn > to; rn++ {
 				set[rn] = -1
 			}
-			ret = append(ret, delTr{pred: set.in})
+			ret = append(ret, delTr{pred: set.in, name: sprintf("%c-%c", to, from)})
 			idx = newIdx
 			continue
 		}
@@ -341,7 +332,16 @@ func makeDelChain(array1 string, complement bool) ([]tr, error) {
 	}
 
 	if len(globalSet) != 0 {
-		ret = append(ret, delTr{pred: globalSet.in})
+		name := ""
+		if c.debug {
+			var sb strings.Builder
+			sb.Grow(len(globalSet))
+			for rn := range globalSet {
+				writeRune(&sb, rn)
+			}
+			name = fmt.Sprintf("%+v", sb.String())
+		}
+		ret = append(ret, delTr{pred: globalSet.in, name: name})
 	}
 
 	return ret, nil
