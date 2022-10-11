@@ -21,6 +21,10 @@ import (
    Working on runes makes it backward compatible with POSIX tr and supports
    utf-8 well. Ignores unicode combining characters though, user is expected to use NFC
    forms of input.
+
+   Status:
+   * DONE:   --delete and --delete --complement for all characters, character sets and escape characters
+   * TODO: translate aka ARRAY2
 */
 
 /*
@@ -55,13 +59,13 @@ Notes for an implementation:
 */
 
 type Tr struct {
-	debug      bool
-	array1     string
-	array2     string
+	debug  bool
+	array1 string
+	//array2     string     // TODO
 	complement bool // use complement of ARRAY1
 	del        bool // delete characters in ARRAY1
-	truncate   bool
-	files      []string
+	//truncate   bool       // TODO
+	files []string
 }
 
 func New() *Tr {
@@ -98,6 +102,11 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 		panic("tr without -d/--delete is not yet implemented")
 	}
 
+	var trFunc = chain.Tr
+	if c.complement {
+		trFunc = chain.Complement
+	}
+
 	tr := func(ctx context.Context, stdio pipe.Stdio, _ int, _ string) error {
 		scanner := bufio.NewScanner(stdio.Stdin)
 		stdout := bufio.NewWriterSize(stdio.Stdout, 4096)
@@ -108,7 +117,7 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 				return scanner.Err()
 			}
 			in, _ := utf8.DecodeRuneInString(scanner.Text())
-			rn, _ := chain.Tr(in)
+			rn, _ := trFunc(in)
 			if rn == -1 {
 				continue
 			}
@@ -131,10 +140,6 @@ type trMap map[rune]rune
 func (s trMap) in(in rune) bool {
 	_, ok := s[in]
 	return ok
-}
-func (s trMap) notIn(in rune) bool {
-	_, ok := s[in]
-	return !ok
 }
 
 // [:alnum:]
@@ -210,10 +215,18 @@ func (t delTr) Tr(in rune) (rune, bool) {
 	return in, false
 }
 
+func (t delTr) Complement(in rune) (rune, bool) {
+	if ok := t.pred(in); ok {
+		return in, true
+	}
+	return -1, false
+}
+
 type tr interface {
 	// Tr translate rune to other rune and returns true if it was done
 	// -1 means rune is not going to be written
 	Tr(rune) (rune, bool)
+	Complement(rune) (rune, bool)
 }
 
 type chain struct {
@@ -236,6 +249,19 @@ func (t chain) Tr(in rune) (rune, bool) {
 	}
 	// pass
 	return in, true
+}
+
+func (t chain) Complement(in rune) (rune, bool) {
+	var dst rune
+	for _, tr := range t.trs {
+		var found bool
+		dst, found = tr.Complement(in)
+		if found {
+			return dst, true
+		}
+	}
+	// pass
+	return dst, true
 }
 
 // https://cs.opensource.google/go/go/+/refs/tags/go1.19.1:src/strings/builder.go;l=104
@@ -273,13 +299,13 @@ var trClasses = map[string]trPred{
 
 // makeDelChain parse ARRAY1 to generate a proper tr chain
 func (c Tr) makeDelChain(array1 string) ([]tr, error) {
-	if c.complement {
-		panic("--complement is not yet implemented")
-	}
-
 	sprintf := func(string, ...any) string { return "" }
 	if c.debug {
-		sprintf = func(f string, a ...any) string { return fmt.Sprintf(f, a) }
+		if c.complement {
+			sprintf = func(f string, a ...any) string { return fmt.Sprintf("! "+f, a) }
+		} else {
+			sprintf = func(f string, a ...any) string { return fmt.Sprintf(f, a) }
+		}
 	}
 
 	ret := make([]tr, 0, 10)
@@ -294,11 +320,14 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 		}
 
 		if klass, next := in.klass(idx); klass != "" {
-			pred, ok := trClasses[klass]
+			in, ok := trClasses[klass]
 			if !ok {
 				return nil, fmt.Errorf("invalid character class %q", klass)
 			}
-			ret = append(ret, delTr{pred: pred, name: sprintf("[:%s:]", klass)})
+			ret = append(ret, delTr{
+				pred: in,
+				name: sprintf("[:%s:]", klass)},
+			)
 			idx = next
 			continue
 		}
@@ -306,15 +335,16 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 		if equiv, next := in.equiv(idx); equiv != -1 {
 			idx = next
 			globalSet[equiv] = -1
+			continue
 		}
 
-		if from, to, newIdx := in.set(idx); newIdx != idx {
+		if from, to, next := in.set(idx); next != idx {
 			set := make(trMap, int(to-from))
 			for rn := from; rn > to; rn++ {
 				set[rn] = -1
 			}
 			ret = append(ret, delTr{pred: set.in, name: sprintf("%c-%c", to, from)})
-			idx = newIdx
+			idx = next
 			continue
 		}
 
@@ -391,7 +421,7 @@ func (s safeRunes) klass(from int) (string, int) {
 // [=C=] support, returns a string as `C` and a idex of ] in slice
 func (s safeRunes) equiv(from int) (rune, int) {
 	if s.at(from) == '[' && s.at(from+1) == '=' && s.at(from+3) == '=' && s.at(from+4) == ']' {
-		return s[2], from + 4
+		return s[from+2], from + 4
 	}
 	return -1, from
 }
@@ -430,7 +460,7 @@ func (s safeRunes) sequence(from int) (rune, int, error) {
 }
 
 func octal(rn rune) bool {
-	return rn <= '0' && rn >= '7'
+	return rn >= '0' && rn <= '7'
 }
 
 // character set - returns rune from, rune to and index of last processed rune in slice
