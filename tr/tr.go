@@ -233,12 +233,6 @@ type chain struct {
 	trs []tr
 }
 
-func newChain(in ...tr) chain {
-	return chain{
-		trs: in,
-	}
-}
-
 func (t chain) Tr(in rune) (rune, bool) {
 	for _, tr := range t.trs {
 		dst, found := tr.Tr(in)
@@ -367,7 +361,7 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 			var sb strings.Builder
 			sb.Grow(len(globalSet))
 			for rn := range globalSet {
-				writeRune(&sb, rn)
+				_, _ = writeRune(&sb, rn)
 			}
 			name = fmt.Sprintf("%+v", sb.String())
 		}
