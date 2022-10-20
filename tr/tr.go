@@ -59,9 +59,9 @@ Notes for an implementation:
 */
 
 type Tr struct {
-	debug  bool
-	array1 string
-	//array2     string     // TODO
+	debug      bool
+	array1     string
+	array2     string
 	complement bool // use complement of ARRAY1
 	del        bool // delete characters in ARRAY1
 	//truncate   bool       // TODO
@@ -74,6 +74,11 @@ func New() *Tr {
 
 func (c *Tr) Array1(in string) *Tr {
 	c.array1 = in
+	return c
+}
+
+func (c *Tr) Array2(in string) *Tr {
+	c.array2 = in
 	return c
 }
 
@@ -99,7 +104,15 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 		chain.trs = trs
 		debug.Printf("trs=%#v", trs)
 	} else {
-		panic("tr without -d/--delete is not yet implemented")
+		if c.complement {
+			panic("--complement for transate is not implemented")
+		}
+		trs, err := c.makeTrChain(c.array1, c.array2)
+		if err != nil {
+			return err
+		}
+		chain.trs = trs
+		debug.Printf("trs=%#v", trs)
 	}
 
 	var trFunc = chain.Tr
@@ -140,6 +153,15 @@ type trMap map[rune]rune
 func (s trMap) in(in rune) bool {
 	_, ok := s[in]
 	return ok
+}
+
+// tr interface
+func (s trMap) Tr(in rune) (rune, bool) {
+	to, ok := s[in]
+	return to, ok
+}
+func (s trMap) Complement(in rune) (rune, bool) {
+	panic("trMap --complement is not yet supported")
 }
 
 // [:alnum:]
@@ -291,7 +313,7 @@ var trClasses = map[string]trPred{
 	"xdigit": xdigit,
 }
 
-// makeDelChain parse ARRAY1 to generate a proper tr chain
+// makeDelChain parse ARRAY1 to generate a proper tr chain for --delete
 func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 	sprintf := func(string, ...any) string { return "" }
 	if c.debug {
@@ -343,16 +365,12 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 		}
 
 	singleChar:
-		if in.at(idx) == '\\' {
-			rn, next, err := in.sequence(idx)
-			if err != nil {
-				return nil, err
-			}
-			globalSet[rn] = -1
-			idx = next
-			continue
+		rn, next, err := in.charAt(idx)
+		if err != nil {
+			return nil, err
 		}
-		globalSet[in[idx]] = -1
+		globalSet[rn] = -1
+		idx = next
 	}
 
 	if len(globalSet) != 0 {
@@ -371,6 +389,85 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 	return ret, nil
 }
 
+// makeTrChain parse ARRAY1 and ARRAY2 to generate a proper tr chain for translation
+func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
+	if c.complement {
+		panic("tr --complement is not yet implemented")
+	}
+	sprintf := func(string, ...any) string { return "" }
+	if c.debug {
+		if c.complement {
+			panic("tr --complement is not yet implemented")
+			//sprintf = func(f string, a ...any) string { return fmt.Sprintf("! "+f, a) }
+		} else {
+			sprintf = func(f string, a ...any) string { return fmt.Sprintf(f, a) }
+		}
+	}
+
+	ret := make([]tr, 0, 10)
+	globalSet := make(trMap)
+
+	in1 := newRunes(array1)
+	in2 := newRunes(array2)
+
+	idx2 := 0
+	for idx1 := 0; idx1 < len(in1); idx1++ {
+
+		if in1.at(idx1) == '\\' {
+			goto singleChar
+		}
+
+		if klass, _ := in1.klass(idx1); klass != "" {
+			sprintf(klass)
+			panic("character classes for tr are not yet implemented")
+		}
+
+		if equiv, _ := in1.equiv(idx1); equiv != -1 {
+			panic("equivalence classes for tr are not yet implemented")
+		}
+
+		if _, _, next := in1.set(idx1); next != idx1 {
+			panic("ranges/sets for tr are not yet implemented")
+		}
+
+	singleChar:
+		from, next, err := in1.charAt(idx1)
+		if err != nil {
+			return nil, err
+		}
+		idx1 = next
+		if in1.typ(idx2) != CHAR {
+			panic("translate to anything than a single char is not yet implemented")
+		}
+		to, next, err := in2.charAt(idx2)
+		if err != nil {
+			return nil, err
+		}
+		idx2 = next + 1
+		globalSet[from] = to
+		continue
+	}
+
+	if len(globalSet) != 0 {
+		/*
+			        name := ""
+					if c.debug {
+						var sb strings.Builder
+						sb.Grow(len(globalSet))
+						for rn := range globalSet {
+							_, _ = writeRune(&sb, rn)
+						}
+						name = fmt.Sprintf("%+v", sb.String())
+					}
+		*/
+		ret = append(ret, globalSet)
+	}
+
+	return ret, nil
+}
+
+// safeRunes is a helper for []rune, gracefully handle out of bound access
+// and provides various helper parsers
 type safeRunes []rune
 
 func newRunes(s string) safeRunes {
@@ -386,6 +483,34 @@ func (s safeRunes) at(idx int) rune {
 		return -1
 	}
 	return s[idx]
+}
+
+type typ uint8
+
+const (
+	NONE typ = 0
+	CHAR
+	KLASS
+	EQUIV
+	SET
+)
+
+func (s safeRunes) typ(idx int) typ {
+	if idx < 0 || idx >= len(s) {
+		return NONE
+	}
+	if klass, _ := s.klass(idx); klass != "" {
+		return KLASS
+	}
+	if equiv, _ := s.equiv(idx); equiv != -1 {
+		return EQUIV
+	}
+	if s.at(idx) == '\\' {
+		if _, _, err := s.sequence(idx); err != nil {
+			return CHAR
+		}
+	}
+	return CHAR
 }
 
 func (s safeRunes) lookAhead(from int, needle rune) int {
@@ -418,6 +543,17 @@ func (s safeRunes) equiv(from int) (rune, int) {
 		return s[from+2], from + 4
 	}
 	return -1, from
+}
+
+func (s safeRunes) charAt(from int) (rune, int, error) {
+	if s.at(from) == '\\' {
+		return s.sequence(from)
+	}
+	rn := s.at(from)
+	if rn == -1 {
+		return rn, from, fmt.Errorf("charAt index %d our of range <0;%d>", from, len(s)-1)
+	}
+	return rn, from, nil
 }
 
 func (s safeRunes) sequence(from int) (rune, int, error) {
