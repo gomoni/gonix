@@ -502,9 +502,9 @@ type typ uint8
 
 const (
 	NONE  typ = 0
-	CHAR      = 1
-	KLASS     = 2
-	EQUIV     = 3
+	CHAR  typ = 1
+	KLASS typ = 2
+	EQUIV typ = 3
 )
 
 func (s safeRunes) typ(idx int) typ {
