@@ -92,6 +92,24 @@ func TestTr(t *testing.T) {
 			Input:    "three\nsmall\npigs\n",
 			Expected: "thraa\nsmall\npigs\n",
 		},
+		{
+			Name:     "tr el a",
+			Filter:   New().Array1("el").Array2("a"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thraa\nsmaaa\npigs\n",
+		},
+		{
+			Name:     "tr el\\n a",
+			Filter:   New().Array1("el\\n").Array2("a"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thraaasmaaaapigsa",
+		},
+		{
+			Name:     "tr el\\n aX",
+			Filter:   New().Array1("el\\n").Array2("aX"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thraaXsmaXXXpigsX",
+		},
 	}
 	test.RunAll(t, testCases)
 }

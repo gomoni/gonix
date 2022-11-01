@@ -391,6 +391,13 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 
 // makeTrChain parse ARRAY1 and ARRAY2 to generate a proper tr chain for translation
 func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
+	if len(array1) == 0 {
+		return nil, fmt.Errorf("array1 is empty")
+	}
+	if len(array2) == 0 {
+		return nil, fmt.Errorf("array2 is empty")
+	}
+
 	if c.complement {
 		panic("tr --complement is not yet implemented")
 	}
@@ -409,10 +416,10 @@ func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 
 	in1 := newRunes(array1)
 	in2 := newRunes(array2)
+	var lastIn2 rune
 
 	idx2 := 0
 	for idx1 := 0; idx1 < len(in1); idx1++ {
-
 		if in1.at(idx1) == '\\' {
 			goto singleChar
 		}
@@ -436,15 +443,21 @@ func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 			return nil, err
 		}
 		idx1 = next
-		if in1.typ(idx2) != CHAR {
+
+		switch in2.typ(idx2) {
+		case NONE:
+			// pass
+		case CHAR:
+			to, next, err := in2.charAt(idx2)
+			if err != nil {
+				return nil, err
+			}
+			lastIn2 = to
+			idx2 = next + 1
+		default:
 			panic("translate to anything than a single char is not yet implemented")
 		}
-		to, next, err := in2.charAt(idx2)
-		if err != nil {
-			return nil, err
-		}
-		idx2 = next + 1
-		globalSet[from] = to
+		globalSet[from] = lastIn2
 		continue
 	}
 
@@ -488,11 +501,10 @@ func (s safeRunes) at(idx int) rune {
 type typ uint8
 
 const (
-	NONE typ = 0
-	CHAR
-	KLASS
-	EQUIV
-	SET
+	NONE  typ = 0
+	CHAR      = 1
+	KLASS     = 2
+	EQUIV     = 3
 )
 
 func (s safeRunes) typ(idx int) typ {
