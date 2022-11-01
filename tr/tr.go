@@ -389,6 +389,13 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 	return ret, nil
 }
 
+func equivInArray2(e rune, _ int) error {
+	return fmt.Errorf("[=%c=] character equivalence cannot appear in array2", e)
+}
+
+var errNoUpperNeitherLower error = fmt.Errorf("allowed character classes in array2 are UPPER and lower only")
+var errMisalignedUpperAndLower error = fmt.Errorf("misaligned UPPER and lower classes")
+
 // makeTrChain parse ARRAY1 and ARRAY2 to generate a proper tr chain for translation
 func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 	if len(array1) == 0 {
@@ -454,8 +461,14 @@ func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 			}
 			lastIn2 = to
 			idx2 = next + 1
-		default:
-			panic("translate to anything than a single char is not yet implemented")
+		case EQUIV:
+			return nil, equivInArray2(in2.equiv(idx2))
+		case KLASS:
+			klass, _ := in2.klass(idx2)
+			if klass == "lower" || klass == "upper" {
+				return nil, errMisalignedUpperAndLower
+			}
+			return nil, errNoUpperNeitherLower
 		}
 		globalSet[from] = lastIn2
 		continue
@@ -480,7 +493,7 @@ func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 }
 
 // safeRunes is a helper for []rune, gracefully handle out of bound access
-// and provides various helper parsers
+// and provides various parsing helpers
 type safeRunes []rune
 
 func newRunes(s string) safeRunes {
