@@ -13,8 +13,11 @@ Unix text utilities implemented in pure Go and an excellent [github.com/benhoyt/
  * cat -uses [goawk](https://github.com/benhoyt/goawk)
  * cksum - POSIX ctx, md5 and sha check sums, runs concurrently (`-j/--threads`) by default
  * head -n/--lines - uses [goawk](https://github.com/gomoni/gonix/blob/main/head/head_negative.awk)
- * tr translate of characters (runes aka unicode codepoints)
  * wc - word count
+
+# Work in progress
+
+ * x/tr translate of characters (runes aka unicode codepoints)
 
 # Go library
 
