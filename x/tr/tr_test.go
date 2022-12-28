@@ -86,6 +86,80 @@ func TestTr(t *testing.T) {
 			Input:    "1:three\n2:small\n3:pigs\n",
 			Expected: "1tee\n2\n3\n",
 		},
+		{
+			Name:     "tr e a",
+			Filter:   New().Array1("e").Array2("a"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thraa\nsmall\npigs\n",
+		},
+		{
+			Name:     "tr el a",
+			Filter:   New().Array1("el").Array2("a"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thraa\nsmaaa\npigs\n",
+		},
+		{
+			Name:     "tr el\\n a",
+			Filter:   New().Array1("el\\n").Array2("a"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thraaasmaaaapigsa",
+		},
+		{
+			Name:     "tr el\\n aX",
+			Filter:   New().Array1("el\\n").Array2("aX"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thraaXsmaXXXpigsX",
+		},
+		{
+			Name:     "tr e xy",
+			Filter:   New().Array1("e").Array2("xy"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thrxx\nsmall\npigs\n",
+		},
+		{
+			Name:     "tr [=e=] xy",
+			Filter:   New().Array1("e").Array2("xy"),
+			Input:    "three\nsmall\npigs\n",
+			Expected: "thrxx\nsmall\npigs\n",
+		},
+		/*
+			{
+				Name:     "tr [:digit:] X",
+				Filter:   New().Array1("[:digit:]").Array2("X"),
+				Input:    "1:three\n2:small\n3:pigs\n",
+				Expected: "X:three\nX:small\nX:pigs\n",
+			},
+			{
+				Name:     "tr [:digit:] XY",
+				Filter:   New().Array1("[:digit:]").Array2("XY"),
+				Input:    "1:three\n2:small\n3:pigs\n",
+				Expected: "Y:three\nY:small\nY:pigs\n",
+			},
+			{
+				Name:     "tr e[:digit:] XY",
+				Filter:   New().Array1("e[:digit:]").Array2("XY"),
+				Input:    "1:three\n2:small\n3:pigs\n",
+				Expected: "Y:thrXX\nY:small\nY:pigs\n",
+			},
+			{
+				Name:     "tr e[:digit:] X",
+				Filter:   New().Array1("e[:digit:]").Array2("X"),
+				Input:    "1:three\n2:small\n3:pigs\n",
+				Expected: "X:thrXX\nX:small\nX:pigs\n",
+			},
+			{
+				Name:     "tr [:digit:]e X",
+				Filter:   New().Array1("[:digit:]e").Array2("X"),
+				Input:    "1:three\n2:small\n3:pigs\n",
+				Expected: "X:thrXX\nX:small\nX:pigs\n",
+			},
+			{
+				Name:     "tr [:digit:]e XY",
+				Filter:   New().Array1("[:digit:]e").Array2("XY"),
+				Input:    "1:three\n2:small\n3:pigs\n",
+				Expected: "Y:thrYY\nY:small\nY:pigs\n",
+			},
+		*/
 	}
 	test.RunAll(t, testCases)
 }

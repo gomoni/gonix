@@ -25,6 +25,10 @@ import (
    Status:
    * DONE:   --delete and --delete --complement for all characters, character sets and escape characters
    * TODO: translate aka ARRAY2
+
+
+ 7. [CHAR*]
+ 8. [CHAR*REPEAT]
 */
 
 /*
@@ -43,8 +47,6 @@ Notes for an implementation:
  10. equivalence classes[=CHAR=]
 	Although equivalence classes are intended to support non-English alphabets, there seems to be no standard way to define them or determine their contents. Therefore, they are not fully implemented in GNU tr; each character’s equivalence class consists only of that character, which is of no particular use.
 
-   can be implemented in terms of https://en.wikipedia.org/wiki/Unicode_equivalence
-
  tr: when translating, the only character classes that may appear in
   string2 are 'upper' and 'lower'
  so [:upper:] -> [:lower:] or vice versa is all what is enabled
@@ -59,9 +61,9 @@ Notes for an implementation:
 */
 
 type Tr struct {
-	debug  bool
-	array1 string
-	//array2     string     // TODO
+	debug      bool
+	array1     string
+	array2     string
 	complement bool // use complement of ARRAY1
 	del        bool // delete characters in ARRAY1
 	//truncate   bool       // TODO
@@ -74,6 +76,11 @@ func New() *Tr {
 
 func (c *Tr) Array1(in string) *Tr {
 	c.array1 = in
+	return c
+}
+
+func (c *Tr) Array2(in string) *Tr {
+	c.array2 = in
 	return c
 }
 
@@ -99,7 +106,15 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 		chain.trs = trs
 		debug.Printf("trs=%#v", trs)
 	} else {
-		panic("tr without -d/--delete is not yet implemented")
+		if c.complement {
+			panic("--complement for translate is not implemented")
+		}
+		trs, err := c.makeTrChain(c.array1, c.array2)
+		if err != nil {
+			return err
+		}
+		chain.trs = trs
+		debug.Printf("trs=%#v", trs)
 	}
 
 	var trFunc = chain.Tr
@@ -140,6 +155,15 @@ type trMap map[rune]rune
 func (s trMap) in(in rune) bool {
 	_, ok := s[in]
 	return ok
+}
+
+// tr interface
+func (s trMap) Tr(in rune) (rune, bool) {
+	to, ok := s[in]
+	return to, ok
+}
+func (s trMap) Complement(in rune) (rune, bool) {
+	panic("trMap --complement is not yet supported")
 }
 
 // [:alnum:]
@@ -291,7 +315,7 @@ var trClasses = map[string]trPred{
 	"xdigit": xdigit,
 }
 
-// makeDelChain parse ARRAY1 to generate a proper tr chain
+// makeDelChain parse ARRAY1 to generate a proper tr chain for --delete
 func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 	sprintf := func(string, ...any) string { return "" }
 	if c.debug {
@@ -343,16 +367,12 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 		}
 
 	singleChar:
-		if in.at(idx) == '\\' {
-			rn, next, err := in.sequence(idx)
-			if err != nil {
-				return nil, err
-			}
-			globalSet[rn] = -1
-			idx = next
-			continue
+		rn, next, err := in.charAt(idx)
+		if err != nil {
+			return nil, err
 		}
-		globalSet[in[idx]] = -1
+		globalSet[rn] = -1
+		idx = next
 	}
 
 	if len(globalSet) != 0 {
@@ -371,6 +391,113 @@ func (c Tr) makeDelChain(array1 string) ([]tr, error) {
 	return ret, nil
 }
 
+func equivInArray2(e rune, _ int) error {
+	return fmt.Errorf("[=%c=] character equivalence cannot appear in array2", e)
+}
+
+var errNoUpperNeitherLower error = fmt.Errorf("allowed character classes in array2 are UPPER and lower only")
+var errMisalignedUpperAndLower error = fmt.Errorf("misaligned UPPER and lower classes")
+
+// makeTrChain parse ARRAY1 and ARRAY2 to generate a proper tr chain for translation
+func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
+	if len(array1) == 0 {
+		return nil, fmt.Errorf("array1 is empty")
+	}
+	if len(array2) == 0 {
+		return nil, fmt.Errorf("array2 is empty")
+	}
+
+	if c.complement {
+		panic("tr --complement is not yet implemented")
+	}
+	sprintf := func(string, ...any) string { return "" }
+	if c.debug {
+		if c.complement {
+			panic("tr --complement is not yet implemented")
+			//sprintf = func(f string, a ...any) string { return fmt.Sprintf("! "+f, a) }
+		} else {
+			sprintf = func(f string, a ...any) string { return fmt.Sprintf(f, a) }
+		}
+	}
+
+	ret := make([]tr, 0, 10)
+	globalSet := make(trMap)
+
+	in1 := newRunes(array1)
+	in2 := newRunes(array2)
+	var lastIn2 rune
+
+	idx2 := 0
+	for idx1 := 0; idx1 < len(in1); idx1++ {
+		if in1.at(idx1) == '\\' {
+			goto singleChar
+		}
+
+		if klass, _ := in1.klass(idx1); klass != "" {
+			sprintf(klass)
+			panic("character classes for tr are not yet implemented")
+		}
+
+		if equiv, _ := in1.equiv(idx1); equiv != -1 {
+			goto singleChar
+		}
+
+		if _, _, next := in1.set(idx1); next != idx1 {
+			panic("ranges/sets for tr are not yet implemented")
+		}
+
+	singleChar:
+		from, next, err := in1.charOrEquivAt(idx1)
+		if err != nil {
+			return nil, err
+		}
+		idx1 = next
+
+		switch in2.typ2(idx2) {
+		case NONE:
+			// pass
+		case CHAR:
+			to, next, err := in2.charAt(idx2)
+			if err != nil {
+				return nil, err
+			}
+			lastIn2 = to
+			idx2 = next + 1
+		case EQUIV:
+			return nil, equivInArray2(in2.equiv(idx2))
+		case KLASS:
+			klass, _ := in2.klass(idx2)
+			if klass == "lower" || klass == "upper" {
+				return nil, errMisalignedUpperAndLower
+			}
+			return nil, errNoUpperNeitherLower
+		case REPEAT:
+			panic("[CHAR*] is not yet implemented")
+		}
+		globalSet[from] = lastIn2
+		continue
+	}
+
+	if len(globalSet) != 0 {
+		/*
+			        name := ""
+					if c.debug {
+						var sb strings.Builder
+						sb.Grow(len(globalSet))
+						for rn := range globalSet {
+							_, _ = writeRune(&sb, rn)
+						}
+						name = fmt.Sprintf("%+v", sb.String())
+					}
+		*/
+		ret = append(ret, globalSet)
+	}
+
+	return ret, nil
+}
+
+// safeRunes is a helper for []rune, gracefully handle out of bound access
+// and provides various parsing helpers
 type safeRunes []rune
 
 func newRunes(s string) safeRunes {
@@ -386,6 +513,46 @@ func (s safeRunes) at(idx int) rune {
 		return -1
 	}
 	return s[idx]
+}
+
+type typ uint8
+
+const (
+	NONE   typ = 0
+	CHAR   typ = 1
+	KLASS  typ = 2
+	EQUIV  typ = 3
+	REPEAT typ = 4
+)
+
+func (s safeRunes) typ(idx int) typ {
+	if idx < 0 || idx >= len(s) {
+		return NONE
+	}
+	if klass, _ := s.klass(idx); klass != "" {
+		return KLASS
+	}
+	if equiv, _ := s.equiv(idx); equiv != -1 {
+		return EQUIV
+	}
+	if s.at(idx) == '\\' {
+		if _, _, err := s.sequence(idx); err != nil {
+			return CHAR
+		}
+	}
+	return CHAR
+}
+
+// typ2 is variant for typ except it recognize REPEAT type compatible with ARRAY2
+// the [CHAR*] is recognized as CHAR1 '[' via typ
+func (s safeRunes) typ2(idx int) typ {
+	typ := s.typ(idx)
+	if typ == CHAR && s.at(idx) == '[' {
+		if rn, _, _ := s.repeat(idx); rn != -1 {
+			return REPEAT
+		}
+	}
+	return typ
 }
 
 func (s safeRunes) lookAhead(from int, needle rune) int {
@@ -418,6 +585,70 @@ func (s safeRunes) equiv(from int) (rune, int) {
 		return s[from+2], from + 4
 	}
 	return -1, from
+}
+
+// [CHAR*] or [CHAR*REPEAT] returns a char, repeats (0 means infinity) and index of last ] in slice
+func (s safeRunes) repeat(from int) (rune, int, int) {
+	if s.at(from) == '[' {
+		if rn, from, err := s.charAt(from + 1); err != nil {
+			if s.at(from+1) == '*' && s.at(from+2) == ']' {
+				return rn, 0, from + 2
+			}
+			if repeat, from, err := s.numberAt(from); err != nil {
+				if s.at(from+1) == ']' {
+					return rn, repeat, from + 1
+				}
+			}
+		}
+	}
+	return -1, 0, from
+}
+
+func (s safeRunes) numberAt(from int) (int, int, error) {
+	start := from
+	to := from
+	base := 10
+	if s.at(from) == '0' {
+		base = 8
+		start += 1
+	}
+	for {
+		if digit(s.at(from)) {
+			to++
+			continue
+		}
+		break
+	}
+	n, err := strconv.ParseInt(string(s[start:to+1]), base, 32)
+	if err != nil {
+		return 0, from, err
+	}
+	return int(n), to + 1, nil
+}
+
+// return a character at index or error - supports escape sequences too
+func (s safeRunes) charAt(from int) (rune, int, error) {
+	if s.at(from) == '\\' {
+		return s.sequence(from)
+	}
+	rn := s.at(from)
+	if rn == -1 {
+		return rn, from, fmt.Errorf("charAt index %d our of range <0;%d>", from, len(s)-1)
+	}
+	return rn, from, nil
+}
+
+// return a character or equivalence class at index or error - supports escape sequences too
+func (s safeRunes) charOrEquivAt(from int) (rune, int, error) {
+	switch s.typ(from) {
+	case CHAR:
+		return s.charAt(from)
+	case EQUIV:
+		e, next := s.equiv(from)
+		return e, next, nil
+	default:
+		return -1, from, fmt.Errorf("Unsupported type, expected 1 - CHAR or 3 - EQUIV, got %d", s.typ(from))
+	}
 }
 
 func (s safeRunes) sequence(from int) (rune, int, error) {
