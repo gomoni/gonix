@@ -25,6 +25,10 @@ import (
    Status:
    * DONE:   --delete and --delete --complement for all characters, character sets and escape characters
    * TODO: translate aka ARRAY2
+
+
+ 7. [CHAR*]
+ 8. [CHAR*REPEAT]
 */
 
 /*
@@ -42,8 +46,6 @@ Notes for an implementation:
  9. [:alnum:] to [:xdigit:]
  10. equivalence classes[=CHAR=]
 	Although equivalence classes are intended to support non-English alphabets, there seems to be no standard way to define them or determine their contents. Therefore, they are not fully implemented in GNU tr; each character’s equivalence class consists only of that character, which is of no particular use.
-
-   can be implemented in terms of https://en.wikipedia.org/wiki/Unicode_equivalence
 
  tr: when translating, the only character classes that may appear in
   string2 are 'upper' and 'lower'
@@ -105,7 +107,7 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 		debug.Printf("trs=%#v", trs)
 	} else {
 		if c.complement {
-			panic("--complement for transate is not implemented")
+			panic("--complement for translate is not implemented")
 		}
 		trs, err := c.makeTrChain(c.array1, c.array2)
 		if err != nil {
@@ -437,7 +439,7 @@ func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 		}
 
 		if equiv, _ := in1.equiv(idx1); equiv != -1 {
-			panic("equivalence classes for tr are not yet implemented")
+			goto singleChar
 		}
 
 		if _, _, next := in1.set(idx1); next != idx1 {
@@ -445,13 +447,13 @@ func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 		}
 
 	singleChar:
-		from, next, err := in1.charAt(idx1)
+		from, next, err := in1.charOrEquivAt(idx1)
 		if err != nil {
 			return nil, err
 		}
 		idx1 = next
 
-		switch in2.typ(idx2) {
+		switch in2.typ2(idx2) {
 		case NONE:
 			// pass
 		case CHAR:
@@ -469,6 +471,8 @@ func (c Tr) makeTrChain(array1, array2 string) ([]tr, error) {
 				return nil, errMisalignedUpperAndLower
 			}
 			return nil, errNoUpperNeitherLower
+		case REPEAT:
+			panic("[CHAR*] is not yet implemented")
 		}
 		globalSet[from] = lastIn2
 		continue
@@ -514,10 +518,11 @@ func (s safeRunes) at(idx int) rune {
 type typ uint8
 
 const (
-	NONE  typ = 0
-	CHAR  typ = 1
-	KLASS typ = 2
-	EQUIV typ = 3
+	NONE   typ = 0
+	CHAR   typ = 1
+	KLASS  typ = 2
+	EQUIV  typ = 3
+	REPEAT typ = 4
 )
 
 func (s safeRunes) typ(idx int) typ {
@@ -536,6 +541,18 @@ func (s safeRunes) typ(idx int) typ {
 		}
 	}
 	return CHAR
+}
+
+// typ2 is variant for typ except it recognize REPEAT type compatible with ARRAY2
+// the [CHAR*] is recognized as CHAR1 '[' via typ
+func (s safeRunes) typ2(idx int) typ {
+	typ := s.typ(idx)
+	if typ == CHAR && s.at(idx) == '[' {
+		if rn, _, _ := s.repeat(idx); rn != -1 {
+			return REPEAT
+		}
+	}
+	return typ
 }
 
 func (s safeRunes) lookAhead(from int, needle rune) int {
@@ -570,6 +587,46 @@ func (s safeRunes) equiv(from int) (rune, int) {
 	return -1, from
 }
 
+// [CHAR*] or [CHAR*REPEAT] returns a char, repeats (0 means infinity) and index of last ] in slice
+func (s safeRunes) repeat(from int) (rune, int, int) {
+	if s.at(from) == '[' {
+		if rn, from, err := s.charAt(from + 1); err != nil {
+			if s.at(from+1) == '*' && s.at(from+2) == ']' {
+				return rn, 0, from + 2
+			}
+			if repeat, from, err := s.numberAt(from); err != nil {
+				if s.at(from+1) == ']' {
+					return rn, repeat, from + 1
+				}
+			}
+		}
+	}
+	return -1, 0, from
+}
+
+func (s safeRunes) numberAt(from int) (int, int, error) {
+	start := from
+	to := from
+	base := 10
+	if s.at(from) == '0' {
+		base = 8
+		start += 1
+	}
+	for {
+		if digit(s.at(from)) {
+			to++
+			continue
+		}
+		break
+	}
+	n, err := strconv.ParseInt(string(s[start:to+1]), base, 32)
+	if err != nil {
+		return 0, from, err
+	}
+	return int(n), to + 1, nil
+}
+
+// return a character at index or error - supports escape sequences too
 func (s safeRunes) charAt(from int) (rune, int, error) {
 	if s.at(from) == '\\' {
 		return s.sequence(from)
@@ -579,6 +636,19 @@ func (s safeRunes) charAt(from int) (rune, int, error) {
 		return rn, from, fmt.Errorf("charAt index %d our of range <0;%d>", from, len(s)-1)
 	}
 	return rn, from, nil
+}
+
+// return a character or equivalence class at index or error - supports escape sequences too
+func (s safeRunes) charOrEquivAt(from int) (rune, int, error) {
+	switch s.typ(from) {
+	case CHAR:
+		return s.charAt(from)
+	case EQUIV:
+		e, next := s.equiv(from)
+		return e, next, nil
+	default:
+		return -1, from, fmt.Errorf("Unsupported type, expected 1 - CHAR or 3 - EQUIV, got %d", s.typ(from))
+	}
 }
 
 func (s safeRunes) sequence(from int) (rune, int, error) {
