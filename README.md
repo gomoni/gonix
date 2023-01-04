@@ -30,6 +30,12 @@ Assembly via [zig](https://ziglang.org) cc.
 2. Create a directory `sbase/$tool` (eg `sbase/tr`)
 3. Run `wasm.sh` inside `sbase/testdata`
 4. The `sbase/$tool` has a `$tool.wasm` inside
+5. Write the `$tool.yaml` describing the command line options
+6. Write the `$tool_test.go` to prove it works and add the following line on top
+```
+//go:generate go run ../../wasm/internal/gen/gen.go -i tr.yaml -p tr -o tr.go
+```
+7. Now `go generate ./...` works!
 
 # Work in progress
 
