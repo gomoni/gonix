@@ -6,15 +6,16 @@ options:
     name: Complement
     type: bool
     cli: -c
-  - text: Delete characters matching
+  - 
+    text: Delete characters matching
     name: Delete
     type: bool
     cli: -d
-  - text: Squeeze repeated characters matching set1 or set2
+  - 
+    text: Squeeze repeated characters matching set1 or set2
     name: Squeeze
     type: bool
     cli: -s
-arguments:
   -
     text: Define set1
     name: Set1

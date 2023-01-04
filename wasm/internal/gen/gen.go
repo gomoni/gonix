@@ -25,7 +25,7 @@ type Option struct {
 	Text string `yaml:"text"`
 	Name string `yaml:"name"`
 	Type string `yaml:"type"`
-	CLI  string `yaml:"cli"`
+	CLI  string `yaml:"cli,omitempty"`
 }
 
 type Render struct {
@@ -33,11 +33,10 @@ type Render struct {
 	Package     string   `yaml:"package"`
 	Struct      string   `yaml:"struct"`
 	Options     []Option `yaml:"options"`
-	Arguments   []Option `yaml:"arguments"`
 }
 
 func (r Render) Capacity() int {
-	return len(r.Options) + len(r.Arguments) + 1
+	return len(r.Options) + 1
 }
 
 const plate = `// DO NOT MODIFY THIS FILE
@@ -70,9 +69,6 @@ type {{.Struct}} struct {
     {{- range .Options}}
         {{goprivate .Name}} {{.Type}}
     {{- end}}
-    {{- range .Arguments}}
-        {{goprivate .Name}} {{.Type}}
-    {{- end}}
 }
 
 // New returns new wasm.Configer for command {{.Package}}
@@ -80,18 +76,18 @@ func New() *{{.Struct}} {
     return &{{.Struct}}{}
 }
 {{range .Options}}
-// {{.Name}}: {{.Text}}
+// {{.Name}}: set {{.Text}}(s)
 func (c *{{$.Struct}}) {{.Name}}(x {{.Type}}) *{{$.Struct}} {
     c.{{goprivate .Name}} = x
     return c
 }
-{{end}}
-{{range .Arguments}}
-// {{.Name}}: {{.Text}}
-func (c *{{$.Struct}}) {{.Name}}(x {{.Type}}) *{{$.Struct}} {
-    c.{{goprivate .Name}} = x
+    {{if eq .Type "[]string"}}
+// Append{{.Name}}: append {{.Text}}(s)
+func (c *{{$.Struct}}) Append{{.Name}}(x ...{{unslice .Type}}) *{{$.Struct}} {
+    c.{{goprivate .Name}} = append(c.{{goprivate .Name}}, x...)
     return c
 }
+    {{end}}
 {{end}}
 
 // Config provides a command line arguments for an underlying command
@@ -99,7 +95,7 @@ func (c {{.Struct}}) Config() wazero.ModuleConfig {
 	return wazero.NewModuleConfig().WithArgs(c.args()...)
 }
 
-func (c Tr) args() []string {
+func (c {{.Struct}}) args() []string {
 	args := make([]string, 1, {{.Capacity}})
 	args[0] = "{{.Package}}"
 
@@ -108,18 +104,22 @@ func (c Tr) args() []string {
         if c.{{goprivate .Name}} {
             args = append(args, "{{.CLI}}")
         }
-        {{else}}
-        panic("Option {{.Name}} have unsupported type {{.Type}}")
-        {{end}}
-    {{end}}
-
-    {{range .Arguments}}
-        {{if eq .Type "string"}}
+        {{else if eq .Type "string"}}
         if c.{{goprivate .Name}} != "" {
+            {{- if ne .CLI ""}}
+            args = append(args, "{{.CLI}}")
+            {{- end}}
             args = append(args, c.{{goprivate .Name}})
         }
+        {{else if eq .Type "[]string"}}
+        for _, x := range c.{{goprivate .Name}} {
+            {{- if ne .CLI ""}}
+            args = append(args, "{{.CLI}}")
+            {{- end}}
+            args = append(args, x)
+        }
         {{else}}
-        panic("Argument {{.Name}} have unsupported type {{.Type}}")
+        panic("Option {{.Name}} have unsupported type {{.Type}}")
         {{end}}
     {{end}}
     return args
@@ -160,6 +160,8 @@ func main() {
 	render.CommandLine = strings.Join(os.Args[1:], " ")
 	funcs := map[string]any{
 		"goprivate": func(s string) string { return goprivate(s) },
+		"singular":  func(s string) string { return singular(s) },
+		"unslice":   func(s string) string { return unslice(s) },
 	}
 
 	t, err := template.New("config.go").Funcs(funcs).Parse(plate)
@@ -205,4 +207,12 @@ func goprivate(s string) string {
 		ret = "_" + ret
 	}
 	return ret
+}
+
+func singular(s string) string {
+	return strings.TrimRight(s, "s")
+}
+
+func unslice(s string) string {
+	return strings.TrimLeft(s, "[]")
 }
