@@ -17,11 +17,11 @@ Unix text utilities implemented in pure Go and an excellent [github.com/benhoyt/
 
 # sbase@WebAssembly
 
-[sbase/](blob/main/sbase/) contains utilities
+[sbase/](sbase/) contains utilities
 [https://git.suckless.org/sbase/](https://git.suckless.org/sbase/) built to Web
 Assembly via [zig](https://ziglang.org) cc.
 
- * [tr](blob/main/sbase/tr)
+ * [tr](sbase/tr)
 
 ## How to build the sbase web assembly
 
