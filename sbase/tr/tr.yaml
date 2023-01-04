@@ -1,3 +1,5 @@
+package: tr
+struct: Tr
 options:
   -
     text: Match to set1 complement

@@ -5,7 +5,7 @@
 //
 // which executed
 //
-//	go run wasm/internal/gen/gen.go -i tr.yaml -p tr -o tr.go
+//	go run wasm/internal/gen/gen.go -i tr.yaml -o tr.go
 package tr
 
 import (

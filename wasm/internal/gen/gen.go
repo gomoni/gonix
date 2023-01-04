@@ -30,10 +30,10 @@ type Option struct {
 
 type Render struct {
 	CommandLine string
-	Package     string
-	Struct      string
-	Options     []Option
-	Arguments   []Option //XXX: reuse Option type
+	Package     string   `yaml:"package"`
+	Struct      string   `yaml:"struct"`
+	Options     []Option `yaml:"options"`
+	Arguments   []Option `yaml:"arguments"`
 }
 
 func (r Render) Capacity() int {
@@ -129,16 +129,11 @@ func (c Tr) args() []string {
 func main() {
 
 	inputp := flag.String("i", "", "input yaml description")
-	packagep := flag.String("p", "", "go package name")
 	outputp := flag.String("o", "", "output go file")
 	flag.Parse()
 
 	if *inputp == "" {
 		log.Fatal("input yaml -i is empty")
-	}
-
-	if *packagep == "" {
-		log.Fatal("name -n is empty")
 	}
 
 	f, err := os.Open(*inputp)
@@ -156,20 +151,13 @@ func main() {
 	}
 	defer out.Close()
 
-	var description map[string][]Option
-	err = yaml.NewDecoder(f).Decode(&description)
+	var render Render
+	err = yaml.NewDecoder(f).Decode(&render)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	render := Render{
-		CommandLine: strings.Join(os.Args[1:], " "),
-		Package:     *packagep,
-		Struct:      gopublic(packagep),
-		Options:     description["options"],
-		Arguments:   description["arguments"],
-	}
-
+	render.CommandLine = strings.Join(os.Args[1:], " ")
 	funcs := map[string]any{
 		"goprivate": func(s string) string { return goprivate(s) },
 	}
@@ -216,11 +204,5 @@ func goprivate(s string) string {
 	if token.IsKeyword(ret) || b.Is(ret) {
 		ret = "_" + ret
 	}
-	return ret
-}
-
-func gopublic(sp *string) string {
-	rn, _ := utf8.DecodeRuneInString(*sp)
-	ret := strings.Replace(*sp, string(rn), string(unicode.ToUpper(rn)), 1)
 	return ret
 }
