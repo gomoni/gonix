@@ -2,18 +2,34 @@
 
 Unix text utilities implemented in pure Go and an excellent [github.com/benhoyt/goawk](https://github.com/benhoyt/goawk)
 
+ * ⚠ not yet guaranteed to be stable, API and a project layout WILL change
  * ✔ Go library
  * ✔ Native pipes in Go
  * ✔ Flexible shell colon parsing and execution
  * ✔ Busybox-like command line tool
- * ⚠ not yet guaranteed to be stable, API may change
 
-# Builtins
+# Native builtins
 
  * cat -uses [goawk](https://github.com/benhoyt/goawk)
  * cksum - POSIX ctx, md5 and sha check sums, runs concurrently (`-j/--threads`) by default
  * head -n/--lines - uses [goawk](https://github.com/gomoni/gonix/blob/main/head/head_negative.awk)
  * wc - word count
+
+# sbase@WebAssembly
+
+[sbase/](blob/main/sbase/) contains utilities
+[https://git.suckless.org/sbase/](https://git.suckless.org/sbase/) built to Web
+Assembly via [zig](https://ziglang.org) cc.
+
+ * [tr](blob/main/sbase/tr)
+
+## How to build the sbase web assembly
+
+0. Install [zig](https://ziglang.org)
+1. Use `git submodule update --init --recursive` to download the `sbase/testdata/sbase` git submodule
+2. Create a directory `sbase/$tool` (eg `sbase/tr`)
+3. Run `wasm.sh` inside `sbase/testdata`
+4. The `sbase/$tool` has a `$tool.wasm` inside
 
 # Work in progress
 
