@@ -40,6 +40,9 @@ func (f Filter) Run(ctx context.Context, stdio pipe.Stdio) error {
 			WithStdout(stdio.Stdout).
 			WithName(fmt.Sprintf("wasm-%d", rand.Int63())),
 	)
+	if err != nil {
+		return err
+	}
 	defer m.Close(ctx)
-	return err
+	return nil
 }
