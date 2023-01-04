@@ -41,31 +41,31 @@ func New() *Tr {
 	return &Tr{}
 }
 
-// Complement: Match to set1 complement
+// Complement: set Match to set1 complement(s)
 func (c *Tr) Complement(x bool) *Tr {
 	c.complement = x
 	return c
 }
 
-// Delete: Delete characters matching
+// Delete: set Delete characters matching(s)
 func (c *Tr) Delete(x bool) *Tr {
 	c._delete = x
 	return c
 }
 
-// Squeeze: Squeeze repeated characters matching set1 or set2
+// Squeeze: set Squeeze repeated characters matching set1 or set2(s)
 func (c *Tr) Squeeze(x bool) *Tr {
 	c.squeeze = x
 	return c
 }
 
-// Set1: Define set1
+// Set1: set Define set1(s)
 func (c *Tr) Set1(x string) *Tr {
 	c.set1 = x
 	return c
 }
 
-// Set2: Define set2
+// Set2: set Define set2(s)
 func (c *Tr) Set2(x string) *Tr {
 	c.set2 = x
 	return c
