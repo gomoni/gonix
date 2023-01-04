@@ -1,0 +1,3 @@
+[submodule "sbase/testdata/sbase"]
+	path = sbase/testdata/sbase
+	url = git://git.suckless.org/sbase
