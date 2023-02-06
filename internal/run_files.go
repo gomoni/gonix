@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/pipe"
 	"github.com/hashicorp/go-multierror"
 )
@@ -28,6 +29,21 @@ func NewRunFiles(files []string, stdio pipe.Stdio, fun func(context.Context, pip
 		stdio: stdio,
 		errs:  nil,
 		fun:   fun,
+	}
+}
+
+func GIONewRunFiles(files []string, stdio unix.StandardIO, fun func(context.Context, unix.StandardIO, int, string) error) RunFiles {
+	return RunFiles{
+		files: files,
+		stdio: pipe.Stdio{Stdin: stdio.Stdin(), Stdout: stdio.Stdout(), Stderr: stdio.Stderr()},
+		errs:  nil,
+		fun:   wrap(fun),
+	}
+}
+
+func wrap(fun func(context.Context, unix.StandardIO, int, string) error) func(context.Context, pipe.Stdio, int, string) error {
+	return func(ctx context.Context, stdio pipe.Stdio, num int, name string) error {
+		return fun(ctx, unix.NewStdio(stdio.Stdin, stdio.Stdout, stdio.Stderr), num, name)
 	}
 }
 
