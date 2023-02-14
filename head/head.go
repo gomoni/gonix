@@ -11,9 +11,10 @@ import (
 	"strconv"
 
 	"github.com/benhoyt/goawk/parser"
+	"github.com/gomoni/gio/pipe"
+	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
-	"github.com/gomoni/gonix/pipe"
 	"github.com/spf13/pflag"
 
 	_ "embed"
@@ -85,8 +86,8 @@ func (c *Head) SetDebug(debug bool) *Head {
 	return c
 }
 
-func (c Head) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := dbg.Logger(c.debug, "cat", stdio.Stderr)
+func (c Head) Run(ctx context.Context, stdio unix.StandardIO) error {
+	debug := dbg.Logger(c.debug, "cat", stdio.Stderr())
 	if c.lines == 0 {
 		return nil
 	}
@@ -114,9 +115,9 @@ func (c Head) Run(ctx context.Context, stdio pipe.Stdio) error {
 		awk.SetVariable("RS", "\x00")
 	}
 
-	var head func(context.Context, pipe.Stdio, int, string) error
+	var head func(context.Context, unix.StandardIO, int, string) error
 	if len(c.files) <= 1 {
-		head = func(ctx context.Context, stdio pipe.Stdio, _ int, _ string) error {
+		head = func(ctx context.Context, stdio unix.StandardIO, _ int, _ string) error {
 			err := awk.Run(ctx, stdio)
 			if err != nil {
 				return pipe.NewError(1, fmt.Errorf("head: fail to run: %w", err))
@@ -124,13 +125,13 @@ func (c Head) Run(ctx context.Context, stdio pipe.Stdio) error {
 			return nil
 		}
 	} else {
-		head = func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
-			fmt.Fprintf(stdio.Stdout, "==> %s <==\n", name)
+		head = func(ctx context.Context, stdio unix.StandardIO, _ int, name string) error {
+			fmt.Fprintf(stdio.Stdout(), "==> %s <==\n", name)
 			err := awk.Run(ctx, stdio)
 			if err != nil {
 				return pipe.NewError(1, fmt.Errorf("head: fail to run: %w", err))
 			}
-			fmt.Fprintln(stdio.Stdout)
+			fmt.Fprintln(stdio.Stdout())
 			return nil
 		}
 	}

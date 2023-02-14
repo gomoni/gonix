@@ -5,7 +5,7 @@ import (
 
 	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
-	"github.com/gomoni/gonix/pipe"
+	"github.com/gomoni/gio/unix"
 )
 
 // Awk - maybe this will morph to bigger awk command, but for know lets
@@ -27,11 +27,11 @@ func (c *Awk) SetVariable(name, value string) *Awk {
 	return c
 }
 
-func (c Awk) Run(ctx context.Context, stdio pipe.Stdio) error {
+func (c Awk) Run(ctx context.Context, stdio unix.StandardIO) error {
 	// not safe to use via different goroutines
-	c.config.Stdin = stdio.Stdin
-	c.config.Output = stdio.Stdout
-	c.config.Error = stdio.Stderr
+	c.config.Stdin = stdio.Stdin()
+	c.config.Output = stdio.Stdout()
+	c.config.Error = stdio.Stderr()
 	_, err := interp.ExecProgram(c.prog, c.config)
 	return err
 }

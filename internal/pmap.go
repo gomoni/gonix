@@ -5,8 +5,8 @@ package internal
 
 import (
 	"context"
+	"errors"
 
-	"github.com/hashicorp/go-multierror"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -42,11 +42,5 @@ func PMap[T any, U any](ctx context.Context, limit uint, slice []T, mapFunc MapF
 		return nil, err
 	}
 
-	var err error
-	for _, e := range errs {
-		if e != nil {
-			err = multierror.Append(e)
-		}
-	}
-	return retu, err
+	return retu, errors.Join(errs...)
 }

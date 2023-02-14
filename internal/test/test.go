@@ -16,7 +16,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/gomoni/gonix/pipe"
+	"github.com/gomoni/gio/unix"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +30,7 @@ func Parallel(t *testing.T) {
 
 // Case is a single test case testing gonix filter
 // It contains a pointer (PF) to type implementing the pipe.Filter interface
-type Case[F pipe.Filter, PF interface{ *F }] struct {
+type Case[F unix.Filter, PF interface{ *F }] struct {
 	Name     string // Name is test case name
 	Input    string // Input is test case input
 	Expected string // Expected is what filter is expected to produce
@@ -38,7 +38,7 @@ type Case[F pipe.Filter, PF interface{ *F }] struct {
 	FromArgs PF     // Optional Filter constructed via FromArgs helper, expected to be equal to Filter
 }
 
-func RunAll[F pipe.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F, PF]) {
+func RunAll[F unix.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F, PF]) {
 	t.Helper()
 
 	for _, tt := range testCases {
@@ -47,11 +47,11 @@ func RunAll[F pipe.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F,
 			Parallel(t)
 
 			var out strings.Builder
-			stdio := pipe.Stdio{
-				Stdin:  bytes.NewBufferString(tt.Input),
-				Stdout: &out,
-				Stderr: os.Stderr,
-			}
+			stdio := unix.NewStdio(
+				bytes.NewBufferString(tt.Input),
+				&out,
+				os.Stderr,
+			)
 			ctx := context.Background()
 
 			if tt.FromArgs != nil {
@@ -65,7 +65,7 @@ func RunAll[F pipe.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F,
 				setDebug.Call([]reflect.Value{reflect.ValueOf(testing.Verbose())})
 			}
 
-			err := pipe.Run(ctx, stdio, *tt.Filter)
+			err := unix.NewLine().Run(ctx, stdio, *tt.Filter)
 			require.NoError(t, err)
 			require.Equal(t, tt.Expected, out.String())
 		})

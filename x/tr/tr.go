@@ -10,9 +10,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
-	"github.com/gomoni/gonix/pipe"
 )
 
 /*
@@ -94,9 +94,9 @@ func (c *Tr) Delete(b bool) *Tr {
 	return c
 }
 
-func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
+func (c Tr) Run(ctx context.Context, stdio unix.StandardIO) error {
 	c.debug = true
-	debug := dbg.Logger(c.debug, "tr", stdio.Stderr)
+	debug := dbg.Logger(c.debug, "tr", stdio.Stderr())
 	var chain chain
 	if c.del {
 		trs, err := c.makeDelChain(c.array1)
@@ -122,9 +122,9 @@ func (c Tr) Run(ctx context.Context, stdio pipe.Stdio) error {
 		trFunc = chain.Complement
 	}
 
-	tr := func(ctx context.Context, stdio pipe.Stdio, _ int, _ string) error {
-		scanner := bufio.NewScanner(stdio.Stdin)
-		stdout := bufio.NewWriterSize(stdio.Stdout, 4096)
+	tr := func(ctx context.Context, stdio unix.StandardIO, _ int, _ string) error {
+		scanner := bufio.NewScanner(stdio.Stdin())
+		stdout := bufio.NewWriterSize(stdio.Stdout(), 4096)
 		defer stdout.Flush()
 		scanner.Split(bufio.ScanRunes)
 		for scanner.Scan() {

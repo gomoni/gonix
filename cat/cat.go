@@ -11,9 +11,10 @@ import (
 	"io"
 	"log"
 
+	"github.com/gomoni/gio/pipe"
+	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
-	"github.com/gomoni/gonix/pipe"
 
 	"github.com/benhoyt/goawk/parser"
 	"github.com/spf13/pflag"
@@ -156,17 +157,17 @@ func (c Cat) modifyStdout() bool {
 	return c.showNumber != None || c.showEnds || c.squeezeBlanks || c.showTabs || c.showNonPrinting
 }
 
-func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := dbg.Logger(c.debug, "cat", stdio.Stderr)
-	var filters []pipe.Filter
+func (c Cat) Run(ctx context.Context, stdio unix.StandardIO) error {
+	debug := dbg.Logger(c.debug, "cat", stdio.Stderr())
+	var filters []unix.Filter
 	if !c.modifyStdout() {
-		filters = []pipe.Filter{cat{debug: c.debug}}
+		filters = []unix.Filter{cat{debug: c.debug}}
 	} else {
 		progs, err := c.awk(debug)
 		if err != nil {
 			return err
 		}
-		filters = make([]pipe.Filter, len(progs))
+		filters = make([]unix.Filter, len(progs))
 		for idx, prog := range progs {
 			filters[idx] = internal.NewAWK(prog)
 		}
@@ -178,8 +179,8 @@ func (c Cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 		return ErrNothingToDo
 	}
 
-	cat := func(ctx context.Context, stdio pipe.Stdio, _ int, _ string) error {
-		err := pipe.Run(ctx, stdio, filters...)
+	cat := func(ctx context.Context, stdio unix.StandardIO, _ int, _ string) error {
+		err := unix.NewLine().Run(ctx, stdio, filters...)
 		if err != nil {
 			return pipe.NewError(1, fmt.Errorf("cat: fail to run: %w", err))
 		}
@@ -224,11 +225,11 @@ type cat struct {
 	debug bool
 }
 
-func (c cat) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := dbg.Logger(c.debug, "cat", stdio.Stderr)
+func (c cat) Run(ctx context.Context, stdio unix.StandardIO) error {
+	debug := dbg.Logger(c.debug, "cat", stdio.Stderr())
 	const n = 8192
 	for {
-		wb, err := io.CopyN(stdio.Stdout, stdio.Stdin, n)
+		wb, err := io.CopyN(stdio.Stdout(), stdio.Stdin(), n)
 		debug.Printf("written %d bytes", wb)
 		if err == io.EOF {
 			break
@@ -247,21 +248,21 @@ func (c cat) Run(ctx context.Context, stdio pipe.Stdio) error {
 // catNonPrinting converts non printable characters to ^ M- codes
 type catNonPrinting struct{}
 
-func (catNonPrinting) Run(ctx context.Context, stdio pipe.Stdio) error {
+func (catNonPrinting) Run(ctx context.Context, stdio unix.StandardIO) error {
 	var inp [4096]byte
 	var out bytes.Buffer
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		n, err := stdio.Stdin.Read(inp[:])
+		n, err := stdio.Stdin().Read(inp[:])
 		if err == io.EOF {
 			return nil
 		} else if err != nil {
 			return err
 		}
 		nonPrinting(inp[:n], &out)
-		_, err = out.WriteTo(stdio.Stdout)
+		_, err = out.WriteTo(stdio.Stdout())
 		if err != nil {
 			return err
 		}

@@ -17,9 +17,10 @@ import (
 	"text/tabwriter"
 	"unicode/utf8"
 
+	"github.com/gomoni/gio/pipe"
+	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
-	"github.com/gomoni/gonix/pipe"
 	"github.com/spf13/pflag"
 )
 
@@ -114,8 +115,8 @@ func (w *Wc) SetDebug(debug bool) *Wc {
 	return w
 }
 
-func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := dbg.Logger(c.debug, "wc", stdio.Stderr)
+func (c Wc) Run(ctx context.Context, stdio unix.StandardIO) error {
+	debug := dbg.Logger(c.debug, "wc", stdio.Stderr())
 
 	files := c.files
 	if len(files) == 0 {
@@ -124,8 +125,8 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 	stat := make([]stats, 0, len(c.files))
 	total := stats{fileName: "total"}
 
-	wc := func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
-		st, err := c.runFile(ctx, stdio.Stdin, debug)
+	wc := func(ctx context.Context, stdio unix.StandardIO, _ int, name string) error {
+		st, err := c.runFile(ctx, stdio.Stdin(), debug)
 		if err != nil {
 			return pipe.NewError(1, fmt.Errorf("wc: fail to run: %w", err))
 		}
@@ -153,7 +154,7 @@ func (c Wc) Run(ctx context.Context, stdio pipe.Stdio) error {
 	}
 	debug.Printf("template=%q", template)
 	debug.Printf("minWidth=%+v, tabwith=8, padding=%+v", minWidth, padding)
-	w := tabwriter.NewWriter(stdio.Stdout, minWidth-padding, 8, padding, ' ', tabwriter.AlignRight)
+	w := tabwriter.NewWriter(stdio.Stdout(), minWidth-padding, 8, padding, ' ', tabwriter.AlignRight)
 
 	if stdinOnly {
 		args := make([]any, 0, len(argsFn))
