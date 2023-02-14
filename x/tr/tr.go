@@ -70,26 +70,26 @@ type Tr struct {
 	files []string
 }
 
-func New() *Tr {
-	return &Tr{}
+func New() Tr {
+	return Tr{}
 }
 
-func (c *Tr) Array1(in string) *Tr {
+func (c Tr) Array1(in string) Tr {
 	c.array1 = in
 	return c
 }
 
-func (c *Tr) Array2(in string) *Tr {
+func (c Tr) Array2(in string) Tr {
 	c.array2 = in
 	return c
 }
 
-func (c *Tr) Complement(b bool) *Tr {
+func (c Tr) Complement(b bool) Tr {
 	c.complement = b
 	return c
 }
 
-func (c *Tr) Delete(b bool) *Tr {
+func (c Tr) Delete(b bool) Tr {
 	c.del = b
 	return c
 }

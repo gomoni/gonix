@@ -2,6 +2,22 @@
 // Use of this source code is governed by a MIT
 // license that can be found in the LICENSE file.
 
+/*
+   Print  newline,  word, and byte counts for each FILE, and a total line if more than one FILE is specified.  A word is a non-zero-length sequence of printable characters delimited
+   by white space.
+
+   With no FILE, or when FILE is -, read standard input.
+
+   The options below may be used to select which counts are printed, always in the following order: newline, word, character, byte, maximum line length.
+
+   --files0-from=F
+          read input from the files specified by NUL-terminated names in file F; If F is - then read names from standard input
+
+   --version
+          output version information and exit
+
+*/
+
 package wc
 
 import (
@@ -24,22 +40,6 @@ import (
 	"github.com/spf13/pflag"
 )
 
-/*
-   Print  newline,  word, and byte counts for each FILE, and a total line if more than one FILE is specified.  A word is a non-zero-length sequence of printable characters delimited
-   by white space.
-
-   With no FILE, or when FILE is -, read standard input.
-
-   The options below may be used to select which counts are printed, always in the following order: newline, word, character, byte, maximum line length.
-
-   --files0-from=F
-          read input from the files specified by NUL-terminated names in file F; If F is - then read names from standard input
-
-   --version
-          output version information and exit
-
-*/
-
 type Wc struct {
 	debug         bool
 	bytes         bool
@@ -50,12 +50,12 @@ type Wc struct {
 	files         []string
 }
 
-func New() *Wc {
-	return &Wc{}
+func New() Wc {
+	return Wc{}
 }
 
 // FromArgs builds a WcFilter from standard argv except the command name (os.Argv[1:])
-func (c *Wc) FromArgs(argv []string) (*Wc, error) {
+func (c Wc) FromArgs(argv []string) (Wc, error) {
 	if len(argv) == 0 {
 		c = c.Bytes(true).Lines(true).Words(true)
 		return c, nil
@@ -70,7 +70,7 @@ func (c *Wc) FromArgs(argv []string) (*Wc, error) {
 
 	err := flag.Parse(argv)
 	if err != nil {
-		return nil, pipe.NewErrorf(1, "wc: parsing failed: %w", err)
+		return Wc{}, pipe.NewErrorf(1, "wc: parsing failed: %w", err)
 	}
 	if len(flag.Args()) > 0 {
 		c.files = flag.Args()
@@ -79,38 +79,38 @@ func (c *Wc) FromArgs(argv []string) (*Wc, error) {
 	return c, nil
 }
 
-func (w *Wc) Bytes(b bool) *Wc {
+func (w Wc) Bytes(b bool) Wc {
 	w.bytes = b
 	return w
 }
 
-func (w *Wc) Chars(b bool) *Wc {
+func (w Wc) Chars(b bool) Wc {
 	w.chars = b
 	return w
 }
 
-func (w *Wc) Lines(lines bool) *Wc {
+func (w Wc) Lines(lines bool) Wc {
 	w.lines = lines
 	return w
 }
 
-func (w *Wc) MaxLineLength(b bool) *Wc {
+func (w Wc) MaxLineLength(b bool) Wc {
 	w.maxLineLength = b
 	return w
 }
 
-func (w *Wc) Words(b bool) *Wc {
+func (w Wc) Words(b bool) Wc {
 	w.words = b
 	return w
 }
 
 // Files adds files into a list of files
-func (w *Wc) Files(files ...string) *Wc {
+func (w Wc) Files(files ...string) Wc {
 	w.files = append(w.files, files...)
 	return w
 }
 
-func (w *Wc) SetDebug(debug bool) *Wc {
+func (w Wc) SetDebug(debug bool) Wc {
 	w.debug = debug
 	return w
 }

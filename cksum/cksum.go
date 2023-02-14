@@ -139,56 +139,56 @@ type CKSum struct {
 	files         []string
 }
 
-func New() *CKSum {
-	return &CKSum{}
+func New() CKSum {
+	return CKSum{}
 }
 
 // Files are input files, where - denotes stdin
-func (c *CKSum) Files(f ...string) *CKSum {
+func (c CKSum) Files(f ...string) CKSum {
 	c.files = append(c.files, f...)
 	return c
 }
 
-func (c *CKSum) Algorithm(algorithm Algorithm) *CKSum {
+func (c CKSum) Algorithm(algorithm Algorithm) CKSum {
 	c.algorithm = algorithm
 	return c
 }
 
-func (c *CKSum) Check(check bool) *CKSum {
+func (c CKSum) Check(check bool) CKSum {
 	c.check = true
 	return c
 }
 
-func (c *CKSum) IgnoreMissing(ignoreMissing bool) *CKSum {
+func (c CKSum) IgnoreMissing(ignoreMissing bool) CKSum {
 	c.ignoreMissing = ignoreMissing
 	return c
 }
 
-func (c *CKSum) Parallel(limit uint) *CKSum {
+func (c CKSum) Parallel(limit uint) CKSum {
 	c.threads = limit
 	return c
 }
 
-func (c *CKSum) Quiet(quiet bool) *CKSum {
+func (c CKSum) Quiet(quiet bool) CKSum {
 	c.quiet = quiet
 	return c
 }
 
-func (c *CKSum) Untagged(untagged bool) *CKSum {
+func (c CKSum) Untagged(untagged bool) CKSum {
 	c.untagged = untagged
 	return c
 }
 
-func (c *CKSum) Status(status bool) *CKSum {
+func (c CKSum) Status(status bool) CKSum {
 	c.status = status
 	return c
 }
-func (c *CKSum) SetDebug(debug bool) *CKSum {
+func (c CKSum) SetDebug(debug bool) CKSum {
 	c.debug = debug
 	return c
 }
 
-func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
+func (c CKSum) FromArgs(argv []string) (CKSum, error) {
 	flag := pflag.FlagSet{}
 	var algorithm Algorithm = NONE
 	flag.VarP(&algorithm, "algorithm", "a", "checksum algorithm to use, crc is default")
@@ -205,7 +205,7 @@ func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	flag.UintVarP(&threads, "threads", "j", 0, "generate or check using N goroutines, 0 equals GOMAXPROCS")
 	err := flag.Parse(argv)
 	if err != nil {
-		return nil, pipe.NewErrorf(1, "cksum: parsing failed: %w", err)
+		return CKSum{}, pipe.NewErrorf(1, "cksum: parsing failed: %w", err)
 	}
 
 	if len(flag.Args()) > 0 {

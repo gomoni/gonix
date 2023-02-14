@@ -17,7 +17,7 @@ import (
 
 func TestCKSum(t *testing.T) {
 	test.Parallel(t)
-	testCases := []test.Case[CKSum, *CKSum]{
+	testCases := []test.Case[CKSum]{
 		{
 			Name:     "default",
 			Filter:   fromArgs(t, nil),
@@ -126,7 +126,7 @@ func TestCheck(t *testing.T) {
 
 	testCases := []struct {
 		name           string
-		cksum          *CKSum
+		cksum          CKSum
 		expectedStdout string
 	}{
 		{
@@ -187,7 +187,7 @@ func TestCheck(t *testing.T) {
 	// test errors
 	errCases := []struct {
 		name           string
-		cksum          *CKSum
+		cksum          CKSum
 		expectedError  string
 		expectedStdout string
 	}{
@@ -252,7 +252,7 @@ func TestCheck(t *testing.T) {
 
 }
 
-func fromArgs(t *testing.T, argv []string) *CKSum {
+func fromArgs(t *testing.T, argv []string) CKSum {
 	t.Helper()
 	n := New()
 	f, err := n.FromArgs(argv)
