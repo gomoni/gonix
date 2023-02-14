@@ -51,10 +51,10 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/gomoni/gio/pipe"
+	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
-	"github.com/gomoni/gonix/pipe"
-	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/pflag"
 	"golang.org/x/crypto/blake2b"
 )
@@ -224,8 +224,8 @@ func (c *CKSum) FromArgs(argv []string) (*CKSum, error) {
 	return c, nil
 }
 
-func (c CKSum) Run(ctx context.Context, stdio pipe.Stdio) error {
-	debug := dbg.Logger(c.debug, "cksum", stdio.Stderr)
+func (c CKSum) Run(ctx context.Context, stdio unix.StandardIO) error {
+	debug := dbg.Logger(c.debug, "cksum", stdio.Stderr())
 	if c.threads == 0 {
 		c.threads = uint(runtime.GOMAXPROCS(0))
 	}
@@ -238,21 +238,21 @@ func (c CKSum) Run(ctx context.Context, stdio pipe.Stdio) error {
 	return c.makeSum(ctx, stdio, debug)
 }
 
-func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) error {
+func (c CKSum) makeSum(ctx context.Context, stdio unix.StandardIO, _ *log.Logger) error {
 	if c.algorithm == NONE {
 		c.algorithm = CRC
 	}
 
-	var makeSum func(context.Context, pipe.Stdio, int, string) error
+	var makeSum func(context.Context, unix.StandardIO, int, string) error
 
 	switch c.algorithm {
 	case CRC:
-		makeSum = func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
-			cksum, size, err := docrc(ctx, func() simpleHash { return &crc{} }, stdio.Stdin)
+		makeSum = func(ctx context.Context, stdio unix.StandardIO, _ int, name string) error {
+			cksum, size, err := docrc(ctx, func() simpleHash { return &crc{} }, stdio.Stdin())
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(stdio.Stdout, "%s %d %s\n", cksum, size, name)
+			fmt.Fprintf(stdio.Stdout(), "%s %d %s\n", cksum, size, name)
 			return nil
 		}
 	default:
@@ -271,7 +271,7 @@ func (c CKSum) makeSum(ctx context.Context, stdio pipe.Stdio, _ *log.Logger) err
 	return runFiles.DoThreads(ctx, c.threads)
 }
 
-func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger) error {
+func (c CKSum) checkSum(ctx context.Context, stdio unix.StandardIO, debug *log.Logger) error {
 	if c.check && c.algorithm == CRC {
 		return fmt.Errorf("--check is not supported with algorithm=%s", c.algorithm)
 	}
@@ -284,8 +284,8 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 		return res, nil
 	}
 
-	ckSum := func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
-		r := bufio.NewScanner(stdio.Stdin)
+	ckSum := func(ctx context.Context, stdio unix.StandardIO, _ int, name string) error {
+		r := bufio.NewScanner(stdio.Stdin())
 		input := make([]string, 0, 16)
 		for r.Scan() {
 			if r.Err() != nil {
@@ -295,11 +295,9 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 		}
 
 		results, err := internal.PMap(ctx, c.threads, input, ckSumOne)
-		var ret uint8 = 0
-		var retErr error
+		var ret int
 		if err != nil {
 			ret = 1
-			retErr = multierror.Append(retErr, err)
 		}
 
 		for _, result := range results {
@@ -308,11 +306,11 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 				continue
 			case stOK:
 				if !c.quiet && !c.status {
-					fmt.Fprintf(stdio.Stdout, "%s: OK\n", result.name)
+					fmt.Fprintf(stdio.Stdout(), "%s: OK\n", result.name)
 				}
 			case stFAILED:
 				if !c.status {
-					fmt.Fprintf(stdio.Stdout, "%s: FAILED\n", result.name)
+					fmt.Fprintf(stdio.Stdout(), "%s: FAILED\n", result.name)
 					ret = 1
 				}
 			case stIO:
@@ -320,7 +318,7 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 					continue
 				}
 				if !c.status {
-					fmt.Fprintf(stdio.Stdout, "%s: FAILED open or read error\n", result.name)
+					fmt.Fprintf(stdio.Stdout(), "%s: FAILED open or read error\n", result.name)
 					ret = 1
 				}
 			default:
@@ -329,7 +327,7 @@ func (c CKSum) checkSum(ctx context.Context, stdio pipe.Stdio, debug *log.Logger
 		}
 
 		if ret != 0 {
-			return pipe.NewError(ret, retErr)
+			return pipe.NewError(ret, err)
 		}
 		return nil
 	}
@@ -520,10 +518,10 @@ func digest(hash simpleHash, stdin io.Reader) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func newDigestFunc(hashFunc func() simpleHash, hashName string, untagged bool) func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
-	return func(ctx context.Context, stdio pipe.Stdio, _ int, name string) error {
+func newDigestFunc(hashFunc func() simpleHash, hashName string, untagged bool) func(ctx context.Context, stdio unix.StandardIO, _ int, name string) error {
+	return func(ctx context.Context, stdio unix.StandardIO, _ int, name string) error {
 		hash := hashFunc()
-		cksum, err := digest(hash, stdio.Stdin)
+		cksum, err := digest(hash, stdio.Stdin())
 		if err != nil {
 			return err
 		}
@@ -531,9 +529,9 @@ func newDigestFunc(hashFunc func() simpleHash, hashName string, untagged bool) f
 			name = "-"
 		}
 		if untagged {
-			fmt.Fprintf(stdio.Stdout, "%s  %s\n", cksum, name)
+			fmt.Fprintf(stdio.Stdout(), "%s  %s\n", cksum, name)
 		} else {
-			fmt.Fprintf(stdio.Stdout, "%s (%s) = %s\n", hashName, name, cksum)
+			fmt.Fprintf(stdio.Stdout(), "%s (%s) = %s\n", hashName, name, cksum)
 		}
 		return nil
 	}

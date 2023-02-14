@@ -9,24 +9,23 @@ import (
 	"context"
 	"log"
 	"os"
-	"os/exec"
 
+	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/cat"
 	"github.com/gomoni/gonix/head"
-	"github.com/gomoni/gonix/pipe"
 	"github.com/gomoni/gonix/wc"
 )
 
-// This example shows the pipe.Run
-func ExampleRun() {
-	stdio := pipe.Stdio{
-		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
+// This example shows the unix.NewLine().Run with cat and wc
+func Example() {
+	stdio := unix.NewStdio(
+		bytes.NewBufferString("three\nsmall\npigs\n"),
+		os.Stdout,
+		os.Stderr,
+	)
 	ctx := context.Background()
 	// printf "three\nsmall\npigs\n" | cat | wc -l
-	err := pipe.Run(ctx, stdio, cat.New(), wc.New().Lines(true))
+	err := unix.NewLine().Run(ctx, stdio, cat.New(), wc.New().Lines(true))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -34,13 +33,13 @@ func ExampleRun() {
 	// 3
 }
 
-// This example shows the pipe.Run with command arguments passed as string slice
-func ExampleRun_from_args() {
-	stdio := pipe.Stdio{
-		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
+// This example shows the unix.NewLine().Run with cat and wc with arguments passed as []string
+func Example_from_args() {
+	stdio := unix.NewStdio(
+		bytes.NewBufferString("three\nsmall\npigs\n"),
+		os.Stdout,
+		os.Stderr,
+	)
 	ctx := context.Background()
 	cat, err := cat.New().FromArgs(nil)
 	if err != nil {
@@ -50,7 +49,7 @@ func ExampleRun_from_args() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = pipe.Run(ctx, stdio, cat, wc)
+	err = unix.NewLine().Run(ctx, stdio, cat, wc)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,12 +57,13 @@ func ExampleRun_from_args() {
 	// 3
 }
 
+/* FIXME: NewExec shall be ported back to gio
 func ExampleRun_exec() {
-	stdio := pipe.Stdio{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
+	stdio := unix.NewStdio(
+		os.Stdin,
+		os.Stdout,
+		os.Stderr,
+	)
 	ctx := context.Background()
 	cmd := exec.Command("go", "version")
 	goVersion := pipe.NewExec(cmd)
@@ -72,71 +72,22 @@ func ExampleRun_exec() {
 		log.Fatal(err)
 	}
 	// go version | wc -l
-	err = pipe.Run(ctx, stdio, goVersion, wc)
+	err = unix.NewLine().Run(ctx, stdio, goVersion, wc)
 	if err != nil {
 		log.Fatal(err)
 	}
 	// Output:
 	// 1
 }
-
-// Parsing of the command line
-func ExampleSh_Run() {
-	builtins := map[string]func([]string) (pipe.Filter, error){
-		"cat": func(a []string) (pipe.Filter, error) { return cat.New().FromArgs(a) },
-		"wc":  func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
-	}
-	// use real shlex code like github.com/desertbit/go-shlex
-	// splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
-	splitfn := func(s string) ([]string, error) { return []string{"cat", "|", "wc", "-l"}, nil }
-	stdio := pipe.Stdio{
-		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
-	ctx := context.Background()
-
-	sh := pipe.NewSh(builtins, splitfn)
-	err := sh.Run(ctx, stdio, `cat | wc -l`)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Output:
-	// 3
-}
-
-// Parsing of the command line with exec enabled
-func ExampleSh_Run_exec() {
-	builtins := map[string]func([]string) (pipe.Filter, error){
-		"wc": func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
-	}
-	// use real shlex code like github.com/desertbit/go-shlex
-	// splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
-	splitfn := func(s string) ([]string, error) { return []string{"go", "version", "|", "wc", "-l"}, nil }
-	stdio := pipe.Stdio{
-		Stdin:  os.Stdin,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
-	ctx := context.Background()
-
-	env := pipe.DuplicateEnviron()
-	sh := pipe.NewSh(builtins, splitfn).NotFoundFunc(env.ExecFunc)
-	err := sh.Run(ctx, stdio, `go version | wc -l`)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// Output:
-	// 1
-}
+*/
 
 func ExampleHead_Run() {
 	head := head.New().Lines(2)
-	err := head.Run(context.TODO(), pipe.Stdio{
-		Stdin:  bytes.NewBufferString("three\nsmall\npigs\n"),
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	})
+	err := head.Run(context.TODO(), unix.NewStdio(
+		bytes.NewBufferString("three\nsmall\npigs\n"),
+		os.Stdout,
+		os.Stderr,
+	))
 	if err != nil {
 		log.Fatal(err)
 	}

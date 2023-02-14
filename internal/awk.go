@@ -6,7 +6,6 @@ import (
 	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/gomoni/gio/unix"
-	"github.com/gomoni/gonix/pipe"
 )
 
 // Awk - maybe this will morph to bigger awk command, but for know lets
@@ -28,20 +27,11 @@ func (c *Awk) SetVariable(name, value string) *Awk {
 	return c
 }
 
-func (c Awk) Run(ctx context.Context, stdio pipe.Stdio) error {
+func (c Awk) Run(ctx context.Context, stdio unix.StandardIO) error {
 	// not safe to use via different goroutines
-	c.config.Stdin = stdio.Stdin
-	c.config.Output = stdio.Stdout
-	c.config.Error = stdio.Stderr
+	c.config.Stdin = stdio.Stdin()
+	c.config.Output = stdio.Stdout()
+	c.config.Error = stdio.Stderr()
 	_, err := interp.ExecProgram(c.prog, c.config)
 	return err
-}
-
-// GIOAWK is a temporary wrapper on top of gio/unix
-type GIOAWK struct {
-	Awk
-}
-
-func (c GIOAWK) Run(ctx context.Context, stdio unix.StandardIO) error {
-	return c.Awk.Run(ctx, pipe.Stdio{Stdin: stdio.Stdin(), Stdout: stdio.Stdout(), Stderr: stdio.Stderr()})
 }

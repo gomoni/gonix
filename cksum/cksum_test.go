@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gomoni/gio/unix"
 	. "github.com/gomoni/gonix/cksum"
 	"github.com/gomoni/gonix/internal/test"
-	"github.com/gomoni/gonix/pipe"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,10 +87,28 @@ func spongef(t *testing.T, name string, format string, a ...any) {
 	require.NoError(t, err)
 }
 
+type emptyStdio struct{}
+
+func (e emptyStdio) Stdin() io.Reader {
+	return noopReader{}
+}
+func (e emptyStdio) Stdout() io.Writer {
+	return io.Discard
+}
+func (e emptyStdio) Stderr() io.Writer {
+	return io.Discard
+}
+
+type noopReader struct{}
+
+func (noopReader) Read([]byte) (int, error) {
+	return 0, nil
+}
+
 func TestCheckCRC(t *testing.T) {
 	test.Parallel(t)
 	cksum := New().Check(true).Algorithm(CRC)
-	err := cksum.Run(context.Background(), pipe.EmptyStdio)
+	err := cksum.Run(context.Background(), emptyStdio{})
 	require.Error(t, err)
 	require.EqualError(t, err, "--check is not supported with algorithm=crc")
 }
@@ -151,11 +169,11 @@ func TestCheck(t *testing.T) {
 
 			var stdout strings.Builder
 			var stderr strings.Builder
-			stdio := pipe.Stdio{
-				Stdin:  nil,
-				Stdout: &stdout,
-				Stderr: &stderr,
-			}
+			stdio := unix.NewStdio(
+				nil,
+				&stdout,
+				&stderr,
+			)
 
 			err := tt.cksum.Run(context.Background(), stdio)
 			t.Logf("stderr=%q", stderr.String())
@@ -213,11 +231,11 @@ func TestCheck(t *testing.T) {
 
 			var stdout strings.Builder
 			var stderr strings.Builder
-			stdio := pipe.Stdio{
-				Stdin:  nil,
-				Stdout: &stdout,
-				Stderr: &stderr,
-			}
+			stdio := unix.NewStdio(
+				nil,
+				&stdout,
+				&stderr,
+			)
 
 			err := tt.cksum.Run(context.Background(), stdio)
 			require.Error(t, err)

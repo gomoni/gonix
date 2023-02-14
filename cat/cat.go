@@ -169,7 +169,7 @@ func (c Cat) Run(ctx context.Context, stdio unix.StandardIO) error {
 		}
 		filters = make([]unix.Filter, len(progs))
 		for idx, prog := range progs {
-			filters[idx] = internal.GIOAWK{Awk: *internal.NewAWK(prog)}
+			filters[idx] = internal.NewAWK(prog)
 		}
 	}
 	if c.showNonPrinting {
@@ -187,7 +187,7 @@ func (c Cat) Run(ctx context.Context, stdio unix.StandardIO) error {
 		return nil
 	}
 
-	runFiles := internal.GIONewRunFiles(c.files, stdio, cat)
+	runFiles := internal.NewRunFiles(c.files, stdio, cat)
 	return runFiles.Do(ctx)
 }
 

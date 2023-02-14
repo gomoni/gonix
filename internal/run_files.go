@@ -3,14 +3,14 @@ package internal
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"runtime"
 
+	"github.com/gomoni/gio/pipe"
 	"github.com/gomoni/gio/unix"
-	"github.com/gomoni/gonix/pipe"
-	"github.com/hashicorp/go-multierror"
 )
 
 // RunFiles is a helper run gonix commands with inputs from more files
@@ -19,11 +19,11 @@ import (
 type RunFiles struct {
 	files []string
 	errs  error
-	stdio pipe.Stdio
-	fun   func(context.Context, pipe.Stdio, int, string) error
+	stdio unix.StandardIO
+	fun   func(context.Context, unix.StandardIO, int, string) error
 }
 
-func NewRunFiles(files []string, stdio pipe.Stdio, fun func(context.Context, pipe.Stdio, int, string) error) RunFiles {
+func NewRunFiles(files []string, stdio unix.StandardIO, fun func(context.Context, unix.StandardIO, int, string) error) RunFiles {
 	return RunFiles{
 		files: files,
 		stdio: stdio,
@@ -32,32 +32,18 @@ func NewRunFiles(files []string, stdio pipe.Stdio, fun func(context.Context, pip
 	}
 }
 
-func GIONewRunFiles(files []string, stdio unix.StandardIO, fun func(context.Context, unix.StandardIO, int, string) error) RunFiles {
-	return RunFiles{
-		files: files,
-		stdio: pipe.Stdio{Stdin: stdio.Stdin(), Stdout: stdio.Stdout(), Stderr: stdio.Stderr()},
-		errs:  nil,
-		fun:   wrap(fun),
-	}
-}
-
-func wrap(fun func(context.Context, unix.StandardIO, int, string) error) func(context.Context, pipe.Stdio, int, string) error {
-	return func(ctx context.Context, stdio pipe.Stdio, num int, name string) error {
-		return fun(ctx, unix.NewStdio(stdio.Stdin, stdio.Stdout, stdio.Stderr), num, name)
-	}
-}
-
-func (l *RunFiles) Do(ctx context.Context) error {
+func (l RunFiles) Do(ctx context.Context) error {
+	errs := make([]error, 0, len(l.files))
 	if len(l.files) == 0 {
-		return l.doOne(ctx, 0, "", l.stdio.Stdout, l.stdio.Stderr)
+		return l.doOne(ctx, 0, "", l.stdio.Stdout(), l.stdio.Stderr(), &errs)
 	}
 	for idx, name := range l.files {
-		err := l.doOne(ctx, idx, name, l.stdio.Stdout, l.stdio.Stderr)
+		err := l.doOne(ctx, idx, name, l.stdio.Stdout(), l.stdio.Stderr(), &errs)
 		if err != nil {
 			return err
 		}
 	}
-	return l.asPipeError()
+	return asPipeError(errs)
 }
 
 type in struct {
@@ -73,7 +59,7 @@ type out struct {
 // DoThreads runs individual tasks concurrently via PMap. Each command writes to the memory buffer
 // first, so probably best to be used for a compute intensive operations like cksum is. As it uses
 // PMap, outputs are in the same order as inputs.
-func (l *RunFiles) DoThreads(ctx context.Context, threads uint) error {
+func (l RunFiles) DoThreads(ctx context.Context, threads uint) error {
 	if threads == 0 {
 		threads = uint(runtime.GOMAXPROCS(0))
 	}
@@ -81,12 +67,16 @@ func (l *RunFiles) DoThreads(ctx context.Context, threads uint) error {
 		return l.Do(ctx)
 	}
 
+	errs := make([]error, 0, len(l.files))
 	one := func(ctx context.Context, in in) (out, error) {
 		out := out{
 			stdout: bytes.NewBuffer(nil),
 			stderr: bytes.NewBuffer(nil),
 		}
-		err := l.doOne(ctx, in.idx, in.name, out.stdout, out.stderr)
+		err := l.doOne(ctx, in.idx, in.name, out.stdout, out.stderr, &errs)
+		if err != nil {
+			errs = append(errs, err)
+		}
 		return out, err
 	}
 
@@ -100,44 +90,45 @@ func (l *RunFiles) DoThreads(ctx context.Context, threads uint) error {
 		return err
 	}
 	for _, out := range outputs {
-		_, err = io.Copy(l.stdio.Stderr, out.stderr)
+		_, err = io.Copy(l.stdio.Stderr(), out.stderr)
 		if err != nil {
-			l.errs = multierror.Append(l.errs, err)
+			errs = append(errs, err)
 		}
-		_, err = io.Copy(l.stdio.Stdout, out.stdout)
+		_, err = io.Copy(l.stdio.Stdout(), out.stdout)
 		if err != nil {
-			l.errs = multierror.Append(l.errs, err)
+			errs = append(errs, err)
 		}
 	}
-	return l.asPipeError()
+	return asPipeError(errs)
 }
 
-func (l *RunFiles) doOne(ctx context.Context, idx int, name string, stdout, stderr io.Writer) error {
+func (l RunFiles) doOne(ctx context.Context, idx int, name string, stdout, stderr io.Writer, errsp *[]error) error {
 	var in io.Reader
 	if name == "" || name == "-" {
-		in = l.stdio.Stdin
+		in = l.stdio.Stdin()
 	} else {
 		f, err := os.Open(name)
 		if err != nil {
-			fmt.Fprintf(l.stdio.Stderr, "%s\n", err)
-			l.errs = multierror.Append(l.errs, err)
+			fmt.Fprintf(l.stdio.Stderr(), "%s\n", err)
+			*errsp = append(*errsp, err)
 			return nil
 		}
 		defer f.Close()
 		in = f
 	}
-	return l.fun(ctx, pipe.Stdio{
-		Stdin:  in,
-		Stdout: stdout,
-		Stderr: stderr},
+	return l.fun(ctx, unix.NewStdio(
+		in,
+		stdout,
+		stderr),
 		idx,
 		name,
 	)
 }
 
-func (l RunFiles) asPipeError() error {
-	if l.errs != nil {
-		return pipe.NewError(1, l.errs)
+func asPipeError(errs []error) error {
+	if len(errs) == 0 {
+		return nil
 	}
-	return nil
+	err := pipe.NewError(1, errors.Join(errs...))
+	return err
 }
