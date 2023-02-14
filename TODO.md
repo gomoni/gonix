@@ -3,18 +3,12 @@
 Implement this?
 >       >128    A command was interrupted by a signal.
 
- * TODO: should we pass environ to builtins too?
-        idea `FromArgs(env Environ, args ...string)` ???
-
- * race detector - should be firstNonZero variable atomic?
-
  * what about tasks running other commands?
     `cat /etc/passwd | xargs -L1 timeout 2s printf "%s\n"`
 
  * implement and a shell scripting builtins like until?
 
-
- * Add (a basic) tr
+ * Add (a basic) tr - x/tr
  * Add (a basic) tail
  * Add sort --version-sort
  * Add (a basic) grep
@@ -67,3 +61,51 @@ sorted by a length of manual page
  * tac
  * timeout - do it via context(?)
  * basenc
+
+
+# #bringmeback
+
+_Following features got lost during a port on top of github.com/gomoni/gio.
+Bring them back at least in a different projects_
+
+Most unix colons exists in shell compatible format. `gonix` provides helpers which can split the shell
+syntax into equivalent Go code. Code can
+
+* ✔ control which names will be mapped into native Go code
+* ✔ supports extra split function ([github.com/desertbit/go-shlex](https://github.com/desertbit/go-shlex) is probably the best)
+* ✔ control what to do if command name is not found
+* ✔ support  `PATH` lookups and binaries execution like shell does, but disabled by default
+* ✔ control environment variables
+
+```go
+	builtins := map[string]func([]string) (pipe.Filter, error){
+		"wc": func(a []string) (pipe.Filter, error) { return wc.New().FromArgs(a) },
+	}
+	// use real shlex code like github.com/desertbit/go-shlex
+	// splitfn := func(s string) ([]string, error) { return shlex.Split(s, true) }
+	splitfn := func(s string) ([]string, error) { return []string{"go", "version", "|", "wc", "-l"}, nil }
+	stdio := pipe.Stdio{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+	ctx := context.Background()
+
+	env := pipe.DuplicateEnviron()
+	sh := pipe.NewSh(builtins, splitfn).NotFoundFunc(env.NotFoundFunc)
+	err := sh.Run(ctx, stdio, `go version | wc -l`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Output:
+	// 1
+```
+
+## Busybox-like command line tool
+
+Can be built and executed like busybox or a toybox.
+
+```sh
+./gonix cat /etc/passwd /etc/resolv.conf | ./gonix cksum --algorithm md5 --untagged md5sum
+```
+
