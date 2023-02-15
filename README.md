@@ -10,6 +10,7 @@ and an excellent [github.com/benhoyt/goawk](https://github.com/benhoyt/goawk)
 
 # Native filters
 
+ * awk - a thin wrapper for [goawk](https://github.com/benhoyt/goawk)
  * cat -uses [goawk](https://github.com/benhoyt/goawk)
  * cksum - POSIX ctx, md5 and sha check sums, runs concurrently (`-j/--threads`) by default
  * head -n/--lines - uses [goawk](https://github.com/gomoni/gonix/blob/main/head/head_negative.awk)
@@ -70,7 +71,7 @@ wc := wc.New()
 // wc gets Lines(true) Chars(true) Bytes(true)
 wc, err := wc.FromArgs(nil)
 // wc gets chars(false)
-wc.Chars(false)
+wc = wc.Chars(false)
 // wc is a value receiver, so never changes the configuration
 err = wc.Run(...)
 ```
@@ -99,7 +100,7 @@ table tests. It uses generics to improve a type safety.
 ```
 import "github.com/gomoni/gonix/internal/test"
 
-	testCases := []test.Case[Wc, *Wc]{
+	testCases := []test.Case[Wc]{
 		{
 			Name:     "wc -l",
 			Filter:   New().Lines(true),
