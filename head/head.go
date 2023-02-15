@@ -13,6 +13,7 @@ import (
 	"github.com/benhoyt/goawk/parser"
 	"github.com/gomoni/gio/pipe"
 	"github.com/gomoni/gio/unix"
+	"github.com/gomoni/gonix/awk"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
 	"github.com/spf13/pflag"
@@ -109,7 +110,7 @@ func (c Head) Run(ctx context.Context, stdio unix.StandardIO) error {
 	if err != nil {
 		return err
 	}
-	awk := internal.NewAWK(prog)
+	awk := awk.NewAWK(prog)
 	awk.SetVariable("lines", strconv.Itoa(lines))
 	if c.zeroTerminated {
 		awk.SetVariable("RS", "\x00")

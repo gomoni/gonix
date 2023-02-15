@@ -1,4 +1,13 @@
-package internal
+// Copyright 2023 Michal Vyskocil. All rights reserved.
+// Use of this source code is governed by a MIT
+// license that can be found in the LICENSE file.
+
+/*
+awk is a thin wrapper on top of github.com/benhoyt/goawk/interp and github.com/benhoyt/goawk/parser
+providing a compatible [unix.Filter] interface for goawk.
+*/
+
+package awk
 
 import (
 	"context"

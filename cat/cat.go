@@ -13,6 +13,7 @@ import (
 
 	"github.com/gomoni/gio/pipe"
 	"github.com/gomoni/gio/unix"
+	"github.com/gomoni/gonix/awk"
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
 
@@ -170,7 +171,7 @@ func (c Cat) Run(ctx context.Context, stdio unix.StandardIO) error {
 		}
 		filters = make([]unix.Filter, len(progs))
 		for idx, prog := range progs {
-			filters[idx] = internal.NewAWK(prog)
+			filters[idx] = awk.NewAWK(prog)
 		}
 	}
 	if c.showNonPrinting {
