@@ -30,15 +30,15 @@ func Parallel(t *testing.T) {
 
 // Case is a single test case testing gonix filter
 // It contains a pointer (PF) to type implementing the pipe.Filter interface
-type Case[F unix.Filter, PF interface{ *F }] struct {
+type Case[F unix.Filter] struct {
 	Name     string // Name is test case name
 	Input    string // Input is test case input
 	Expected string // Expected is what filter is expected to produce
-	Filter   PF     // Filter is a pointer to type implementing the pipe.Filter
-	FromArgs PF     // Optional Filter constructed via FromArgs helper, expected to be equal to Filter
+	Filter   F      // Filter is a pointer to type implementing the pipe.Filter
+	FromArgs F      // Optional Filter constructed via FromArgs helper, expected to be equal to Filter
 }
 
-func RunAll[F unix.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F, PF]) {
+func RunAll[F unix.Filter](t *testing.T, testCases []Case[F]) {
 	t.Helper()
 
 	for _, tt := range testCases {
@@ -54,7 +54,8 @@ func RunAll[F unix.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F,
 			)
 			ctx := context.Background()
 
-			if tt.FromArgs != nil {
+			var zero F
+			if !reflect.DeepEqual(tt.FromArgs, zero) {
 				require.Equal(t, tt.FromArgs, tt.Filter)
 			}
 
@@ -65,7 +66,7 @@ func RunAll[F unix.Filter, PF interface{ *F }](t *testing.T, testCases []Case[F,
 				setDebug.Call([]reflect.Value{reflect.ValueOf(testing.Verbose())})
 			}
 
-			err := unix.NewLine().Run(ctx, stdio, *tt.Filter)
+			err := unix.NewLine().Run(ctx, stdio, tt.Filter)
 			require.NoError(t, err)
 			require.Equal(t, tt.Expected, out.String())
 		})

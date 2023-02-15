@@ -14,7 +14,7 @@ import (
 
 func TestHead(t *testing.T) {
 	test.Parallel(t)
-	testCases := []test.Case[Head, *Head]{
+	testCases := []test.Case[Head]{
 		{
 			Name:     "default",
 			Filter:   fromArgs(t, []string{}),
@@ -46,7 +46,7 @@ func TestHead(t *testing.T) {
 	test.RunAll(t, testCases)
 }
 
-func fromArgs(t *testing.T, argv []string) *Head {
+func fromArgs(t *testing.T, argv []string) Head {
 	t.Helper()
 	n := New()
 	f, err := n.FromArgs(argv)

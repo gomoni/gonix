@@ -17,7 +17,7 @@ import (
 func TestWc(t *testing.T) {
 	test.Parallel(t)
 	threeSmallPigs := test.Testdata(t, "three-small-pigs")
-	testCases := []test.Case[Wc, *Wc]{
+	testCases := []test.Case[Wc]{
 		{
 			Name:     "default",
 			Filter:   fromArgs(t, []string{}),
@@ -57,7 +57,7 @@ func TestWc(t *testing.T) {
 	test.RunAll(t, testCases)
 }
 
-func fromArgs(t *testing.T, argv []string) *Wc {
+func fromArgs(t *testing.T, argv []string) Wc {
 	t.Helper()
 	n := New()
 	f, err := n.FromArgs(argv)

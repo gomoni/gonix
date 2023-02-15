@@ -33,11 +33,11 @@ type Head struct {
 	files          []string
 }
 
-func New() *Head {
-	return &Head{}
+func New() Head {
+	return Head{}
 }
 
-func (c *Head) FromArgs(argv []string) (*Head, error) {
+func (c Head) FromArgs(argv []string) (Head, error) {
 	if len(argv) == 0 {
 		c = c.Lines(10)
 		return c, nil
@@ -52,7 +52,7 @@ func (c *Head) FromArgs(argv []string) (*Head, error) {
 
 	err := flag.Parse(argv)
 	if err != nil {
-		return nil, pipe.NewErrorf(1, "head: parsing failed: %w", err)
+		return Head{}, pipe.NewErrorf(1, "head: parsing failed: %w", err)
 	}
 	if len(flag.Args()) > 0 {
 		c.files = flag.Args()
@@ -66,22 +66,22 @@ func (c *Head) FromArgs(argv []string) (*Head, error) {
 }
 
 // Files are input files, where - denotes stdin
-func (c *Head) Files(f ...string) *Head {
+func (c Head) Files(f ...string) Head {
 	c.files = append(c.files, f...)
 	return c
 }
 
-func (c *Head) Lines(lines int) *Head {
+func (c Head) Lines(lines int) Head {
 	c.lines = lines
 	return c
 }
 
-func (c *Head) ZeroTerminated(zeroTerminated bool) *Head {
+func (c Head) ZeroTerminated(zeroTerminated bool) Head {
 	c.zeroTerminated = zeroTerminated
 	return c
 }
 
-func (c *Head) SetDebug(debug bool) *Head {
+func (c Head) SetDebug(debug bool) Head {
 	c.debug = debug
 	return c
 }

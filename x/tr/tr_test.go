@@ -13,7 +13,7 @@ func TestMain(m *testing.M) {
 
 func TestTr(t *testing.T) {
 	test.Parallel(t)
-	testCases := []test.Case[Tr, *Tr]{
+	testCases := []test.Case[Tr]{
 		{
 			Name:     "tr -d aeiou",
 			Filter:   New().Array1("aeiou").Delete(true),

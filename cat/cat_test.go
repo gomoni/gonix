@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 func TestCat(t *testing.T) {
 	test.Parallel(t)
 
-	testCases := []test.Case[Cat, *Cat]{
+	testCases := []test.Case[Cat]{
 		{
 			Name:     "cat",
 			Filter:   New(),
@@ -164,7 +164,7 @@ func TestError(t *testing.T) {
 
 }
 
-func fromArgs(t *testing.T, argv []string) *Cat {
+func fromArgs(t *testing.T, argv []string) Cat {
 	t.Helper()
 	n := New()
 	f, err := n.FromArgs(argv)

@@ -59,12 +59,13 @@ type Cat struct {
 	showNonPrinting bool
 }
 
-func New() *Cat {
-	return &Cat{}
+func New() Cat {
+	return Cat{}
 }
 
 // FromArgs build a Cat from standard argv except the command name (os.Argv[1:])
-func (c *Cat) FromArgs(argv []string) (*Cat, error) {
+func (c Cat) FromArgs(argv []string) (Cat, error) {
+	var zero Cat
 	flag := pflag.FlagSet{}
 
 	nb := flag.BoolP("number-nonblank", "b", false, "number non blank lines only")
@@ -84,7 +85,7 @@ func (c *Cat) FromArgs(argv []string) (*Cat, error) {
 
 	err := flag.Parse(argv)
 	if err != nil {
-		return nil, pipe.NewErrorf(1, "cat: parsing failed: %w", err)
+		return zero, pipe.NewErrorf(1, "cat: parsing failed: %w", err)
 	}
 
 	if all {
@@ -112,43 +113,43 @@ func (c *Cat) FromArgs(argv []string) (*Cat, error) {
 }
 
 // Files are input files, where - denotes stdin
-func (c *Cat) Files(f ...string) *Cat {
+func (c Cat) Files(f ...string) Cat {
 	c.files = append(c.files, f...)
 	return c
 }
 
 // ShowNumber adds none all or non empty output lines
-func (c *Cat) ShowNumber(n number) *Cat {
+func (c Cat) ShowNumber(n number) Cat {
 	c.showNumber = n
 	return c
 }
 
 // ShowEnds add $ to the end of each line
-func (c *Cat) ShowEnds(b bool) *Cat {
+func (c Cat) ShowEnds(b bool) Cat {
 	c.showEnds = b
 	return c
 }
 
 // SqueezeBlanks - supress repeated empty lines
-func (c *Cat) SqueezeBlanks(b bool) *Cat {
+func (c Cat) SqueezeBlanks(b bool) Cat {
 	c.squeezeBlanks = b
 	return c
 }
 
 // ShowTabs display TAB as ^I
-func (c *Cat) ShowTabs(b bool) *Cat {
+func (c Cat) ShowTabs(b bool) Cat {
 	c.showTabs = b
 	return c
 }
 
 // ShowNonPrinting use ^ and M- notation, except for LFD and TAB
-func (c *Cat) ShowNonPrinting(b bool) *Cat {
+func (c Cat) ShowNonPrinting(b bool) Cat {
 	c.showNonPrinting = b
 	return c
 }
 
 // SetDebug additional debugging messages on stderr
-func (c *Cat) SetDebug(debug bool) *Cat {
+func (c Cat) SetDebug(debug bool) Cat {
 	c.debug = debug
 	return c
 }
