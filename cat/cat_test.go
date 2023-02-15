@@ -11,10 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gomoni/gio/pipe"
-	"github.com/gomoni/gio/unix"
 	. "github.com/gomoni/gonix/cat"
 	"github.com/gomoni/gonix/internal/test"
+
+	"github.com/gomoni/gio/pipe"
+	"github.com/gomoni/gio/unix"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 )

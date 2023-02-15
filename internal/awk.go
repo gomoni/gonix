@@ -23,7 +23,7 @@ func NewAWK(prog *parser.Program) *Awk {
 }
 
 func (c *Awk) SetVariable(name, value string) *Awk {
-	c.config.Args = append(c.config.Args, name+"="+value)
+	c.config.Vars = append(c.config.Vars, []string{name, value}...)
 	return c
 }
 
