@@ -3,7 +3,7 @@ module github.com/gomoni/gonix
 go 1.20
 
 require (
-	github.com/benhoyt/goawk v1.18.0
+	github.com/benhoyt/goawk v1.21.0
 	github.com/gomoni/gio v0.0.0-20230206214735-ff72054e35d2
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.1
