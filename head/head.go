@@ -10,6 +10,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/gomoni/gio/pipe"
 	"github.com/gomoni/gio/unix"
@@ -110,7 +111,7 @@ func (c Head) Run(ctx context.Context, stdio unix.StandardIO) error {
 	if err != nil {
 		return err
 	}
-	awk := awk.NewAWK(prog)
+	awk := awk.New(prog, &interp.Config{})
 	awk.SetVariable("lines", strconv.Itoa(lines))
 	if c.zeroTerminated {
 		awk.SetVariable("RS", "\x00")

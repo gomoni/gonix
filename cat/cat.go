@@ -17,6 +17,7 @@ import (
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
 
+	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/spf13/pflag"
 
@@ -171,7 +172,7 @@ func (c Cat) Run(ctx context.Context, stdio unix.StandardIO) error {
 		}
 		filters = make([]unix.Filter, len(progs))
 		for idx, prog := range progs {
-			filters[idx] = awk.NewAWK(prog)
+			filters[idx] = awk.New(prog, &interp.Config{})
 		}
 	}
 	if c.showNonPrinting {

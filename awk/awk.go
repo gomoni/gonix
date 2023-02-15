@@ -17,26 +17,26 @@ import (
 	"github.com/gomoni/gio/unix"
 )
 
-// Awk - maybe this will morph to bigger awk command, but for know lets
+// AWK - maybe this will morph to bigger awk command, but for know lets
 // keep it here in order to reuse Run functionality of a multiple awk programs
-type Awk struct {
+type AWK struct {
 	prog   *parser.Program
 	config *interp.Config
 }
 
-func NewAWK(prog *parser.Program) *Awk {
-	return &Awk{
+func New(prog *parser.Program, config *interp.Config) *AWK {
+	return &AWK{
 		prog:   prog,
-		config: &interp.Config{},
+		config: config,
 	}
 }
 
-func (c *Awk) SetVariable(name, value string) *Awk {
+func (c *AWK) SetVariable(name, value string) *AWK {
 	c.config.Vars = append(c.config.Vars, []string{name, value}...)
 	return c
 }
 
-func (c Awk) Run(ctx context.Context, stdio unix.StandardIO) error {
+func (c AWK) Run(ctx context.Context, stdio unix.StandardIO) error {
 	// not safe to use via different goroutines
 	c.config.Stdin = stdio.Stdin()
 	c.config.Output = stdio.Stdout()
