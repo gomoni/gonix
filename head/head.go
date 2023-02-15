@@ -10,7 +10,6 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/gomoni/gio/pipe"
 	"github.com/gomoni/gio/unix"
@@ -107,15 +106,17 @@ func (c Head) Run(ctx context.Context, stdio unix.StandardIO) error {
 	debug.Printf("head: lines=%d", lines)
 	debug.Printf("head: zero-terminated=%t", c.zeroTerminated)
 
+	config := awk.NewConfig()
+	if c.zeroTerminated {
+		config.Vars = append(config.Vars, []string{"RS", "\x00"}...)
+	}
+
 	prog, err := parser.ParseProgram([]byte(src), nil)
 	if err != nil {
 		return err
 	}
-	awk := awk.New(prog, &interp.Config{})
-	awk.SetVariable("lines", strconv.Itoa(lines))
-	if c.zeroTerminated {
-		awk.SetVariable("RS", "\x00")
-	}
+	awk := awk.New(prog, config)
+	config.Vars = append(config.Vars, []string{"lines", strconv.Itoa(lines)}...)
 
 	var head func(context.Context, unix.StandardIO, int, string) error
 	if len(c.files) <= 1 {

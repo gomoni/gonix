@@ -17,6 +17,16 @@ import (
 	"github.com/gomoni/gio/unix"
 )
 
+func NewConfig() *interp.Config {
+	return &interp.Config{
+		NoArgVars:    true,
+		NoExec:       true,
+		NoFileWrites: true,
+		NoFileReads:  true,
+		ShellCommand: []string{"/bin/true"},
+	}
+}
+
 // AWK - maybe this will morph to bigger awk command, but for know lets
 // keep it here in order to reuse Run functionality of a multiple awk programs
 type AWK struct {
@@ -24,23 +34,19 @@ type AWK struct {
 	config *interp.Config
 }
 
-func New(prog *parser.Program, config *interp.Config) *AWK {
-	return &AWK{
+func New(prog *parser.Program, config *interp.Config) AWK {
+	return AWK{
 		prog:   prog,
 		config: config,
 	}
 }
 
-func (c *AWK) SetVariable(name, value string) *AWK {
-	c.config.Vars = append(c.config.Vars, []string{name, value}...)
-	return c
-}
-
 func (c AWK) Run(ctx context.Context, stdio unix.StandardIO) error {
 	// not safe to use via different goroutines
-	c.config.Stdin = stdio.Stdin()
-	c.config.Output = stdio.Stdout()
-	c.config.Error = stdio.Stderr()
-	_, err := interp.ExecProgram(c.prog, c.config)
+	config := *c.config
+	config.Stdin = stdio.Stdin()
+	config.Output = stdio.Stdout()
+	config.Error = stdio.Stderr()
+	_, err := interp.ExecProgram(c.prog, &config)
 	return err
 }
