@@ -17,8 +17,6 @@ import (
 	"github.com/gomoni/gonix/internal"
 	"github.com/gomoni/gonix/internal/dbg"
 
-	"github.com/benhoyt/goawk/interp"
-	"github.com/benhoyt/goawk/parser"
 	"github.com/spf13/pflag"
 
 	_ "embed"
@@ -172,7 +170,7 @@ func (c Cat) Run(ctx context.Context, stdio unix.StandardIO) error {
 		}
 		filters = make([]unix.Filter, len(progs))
 		for idx, prog := range progs {
-			filters[idx] = awk.New(prog, &interp.Config{})
+			filters[idx] = unix.Filter(prog)
 		}
 	}
 	if c.showNonPrinting {
@@ -194,7 +192,7 @@ func (c Cat) Run(ctx context.Context, stdio unix.StandardIO) error {
 	return runFiles.Do(ctx)
 }
 
-func (c Cat) awk(debug *log.Logger) ([]*parser.Program, error) {
+func (c Cat) awk(debug *log.Logger) ([]awk.AWK, error) {
 	debug.Printf("c=%+v", c)
 	var sources [][]byte
 	if c.showEnds {
@@ -212,11 +210,11 @@ func (c Cat) awk(debug *log.Logger) ([]*parser.Program, error) {
 		sources = append(sources, showTabsAwk)
 	}
 
-	progs := make([]*parser.Program, len(sources))
+	progs := make([]awk.AWK, len(sources))
 	for idx, src := range sources {
 		debug.Printf("goawk src[%d] = %q", idx, src)
 		var err error
-		progs[idx], err = parser.ParseProgram(src, nil)
+		progs[idx], err = awk.Compile(src, awk.NewConfig())
 		if err != nil {
 			return nil, err
 		}

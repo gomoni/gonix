@@ -11,6 +11,8 @@ package awk
 
 import (
 	"context"
+	"fmt"
+	"io"
 
 	"github.com/benhoyt/goawk/interp"
 	"github.com/benhoyt/goawk/parser"
@@ -27,26 +29,49 @@ func NewConfig() *interp.Config {
 	}
 }
 
-// AWK - maybe this will morph to bigger awk command, but for know lets
-// keep it here in order to reuse Run functionality of a multiple awk programs
+// AWK is a thin wrapper on top of github.com/benhoyt/goawk
 type AWK struct {
-	prog   *parser.Program
-	config *interp.Config
+	program *parser.Program
+	config  *interp.Config
 }
 
 func New(prog *parser.Program, config *interp.Config) AWK {
 	return AWK{
-		prog:   prog,
-		config: config,
+		program: prog,
+		config:  config,
 	}
 }
 
+func Compile(src []byte, config *interp.Config) (AWK, error) {
+	if config == nil {
+		return AWK{}, fmt.Errorf("nil config")
+	}
+	pconfig := parser.ParserConfig{
+		DebugTypes:  false,
+		DebugWriter: io.Discard,
+		Funcs:       config.Funcs,
+	}
+	prog, err := parser.ParseProgram(src, &pconfig)
+	if err != nil {
+		return AWK{}, err
+	}
+	return AWK{
+		program: prog,
+		config:  config,
+	}, nil
+}
+
 func (c AWK) Run(ctx context.Context, stdio unix.StandardIO) error {
-	// not safe to use via different goroutines
+	if c.config == nil {
+		return fmt.Errorf("nil config")
+	}
+	if c.program == nil {
+		return fmt.Errorf("nil prog")
+	}
 	config := *c.config
 	config.Stdin = stdio.Stdin()
 	config.Output = stdio.Stdout()
 	config.Error = stdio.Stderr()
-	_, err := interp.ExecProgram(c.prog, &config)
+	_, err := interp.ExecProgram(c.program, &config)
 	return err
 }

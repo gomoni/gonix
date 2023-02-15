@@ -10,7 +10,6 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/benhoyt/goawk/parser"
 	"github.com/gomoni/gio/pipe"
 	"github.com/gomoni/gio/unix"
 	"github.com/gomoni/gonix/awk"
@@ -110,18 +109,17 @@ func (c Head) Run(ctx context.Context, stdio unix.StandardIO) error {
 	if c.zeroTerminated {
 		config.Vars = append(config.Vars, []string{"RS", "\x00"}...)
 	}
+	config.Vars = append(config.Vars, []string{"lines", strconv.Itoa(lines)}...)
 
-	prog, err := parser.ParseProgram([]byte(src), nil)
+	prog, err := awk.Compile([]byte(src), config)
 	if err != nil {
 		return err
 	}
-	awk := awk.New(prog, config)
-	config.Vars = append(config.Vars, []string{"lines", strconv.Itoa(lines)}...)
 
 	var head func(context.Context, unix.StandardIO, int, string) error
 	if len(c.files) <= 1 {
 		head = func(ctx context.Context, stdio unix.StandardIO, _ int, _ string) error {
-			err := awk.Run(ctx, stdio)
+			err := prog.Run(ctx, stdio)
 			if err != nil {
 				return pipe.NewError(1, fmt.Errorf("head: fail to run: %w", err))
 			}
@@ -130,7 +128,7 @@ func (c Head) Run(ctx context.Context, stdio unix.StandardIO) error {
 	} else {
 		head = func(ctx context.Context, stdio unix.StandardIO, _ int, name string) error {
 			fmt.Fprintf(stdio.Stdout(), "==> %s <==\n", name)
-			err := awk.Run(ctx, stdio)
+			err := prog.Run(ctx, stdio)
 			if err != nil {
 				return pipe.NewError(1, fmt.Errorf("head: fail to run: %w", err))
 			}
